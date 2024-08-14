@@ -21,6 +21,7 @@ from ai_search_utilities import create_vector_index, get_current_index, insert_d
 from chunking_utils import create_chunks, split_text
 import tempfile
 import subprocess
+import concurrent.futures
 
 app = df.DFApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -2025,3 +2026,52 @@ def convert_to_pdf_helper(input_bytes):
     
     # Return the PDF bytes
     return pdf_bytes
+
+@app.route(route="pdf_ingest_speed_mode", auth_level=func.AuthLevel.FUNCTION)
+def pdf_ingest_speed_mode(req: func.HttpRequest) -> func.HttpResponse:
+    # Utility function to ingest a PDF document quickly for interactive chat purposes
+
+    data = req.get_json()
+    
+    # Extract the index stem name from the payload
+    filename = data.get("filename")
+    filedata = data.get("filedata")
+    filedata = base64.b64decode(filedata)
+    container = data.get("container")
+    index_name = data.get("index_name")
+    entra_id = data.get("entra_id")
+    session_id = data.get("session_id")
+
+    # Write file to blob storage
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    container_client = blob_service_client.get_container_client(container=container)
+    blob_client = container_client.get_blob_client(blob=filename)
+    blob_client.upload_blob(filedata, overwrite=True)
+
+    # Process with document intelligence and retrieve formatted data
+    analysis = analyze_pdf(filedata)
+    page_map = extract_results(analysis, filename)
+
+    def process_pages(page, entra_id, session_id, filename):
+        content = page[1]
+        embeddings = generate_embeddings(content)
+        id_str = content + filename + session_id
+        id = hashlib.sha256(id_str.encode('utf-8')).hexdigest()
+        return {
+            'id': id,
+            'content': content,
+            'embeddings': embeddings,
+            'sourcefile': filename,
+            'pagenumber': page[0],
+            # 'user_id': entra_id,
+            # 'session_id': session_id
+        }
+
+    # Page-wise chunks
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        chunked_docs = list(executor.map(process_pages, page_map, [entra_id]*len(page_map), [session_id]*len(page_map), [filename]*len(page_map)))
+
+    # Insert into index
+    insert_documents_vector(chunked_docs, index_name)
+
+    return json.dumps({'index': index_name})
