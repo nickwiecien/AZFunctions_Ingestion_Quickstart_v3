@@ -15,7 +15,7 @@ from PIL import Image
 import io
 import base64
 
-from doc_intelligence_utilities import analyze_pdf, extract_results
+from doc_intelligence_utilities import analyze_pdf, extract_results, read_document
 from aoai_utilities import generate_embeddings, classify_image, analyze_image, get_transcription
 from ai_search_utilities import create_vector_index, get_current_index, insert_documents_vector, delete_documents_vector
 from chunking_utils import create_chunks, split_text
@@ -2075,3 +2075,35 @@ def pdf_ingest_speed_mode(req: func.HttpRequest) -> func.HttpResponse:
     insert_documents_vector(chunked_docs, index_name)
 
     return json.dumps({'index': index_name})
+
+# Extract only text from a PDF, PPTX, Word, HTML, PNG, or JPG file
+@app.route(route="ocr_doc_text_speed_mode", auth_level=func.AuthLevel.FUNCTION)
+def ocr_doc_text_speed_mode(req: func.HttpRequest) -> func.HttpResponse:
+    # Utility function to ingest a PDF document quickly for interactive chat purposes
+
+    data = req.get_body()
+
+    # Process with document intelligence and retrieve formatted data
+    text = read_document(data)
+    
+    return json.dumps({'text': text})
+
+# Extract only text from PDF documents
+@app.route(route="read_pdf_text_speed_mode", auth_level=func.AuthLevel.FUNCTION)
+def read_pdf_text_speed_mode(req: func.HttpRequest) -> func.HttpResponse:
+    # Utility function to ingest a PDF document quickly for interactive chat purposes
+
+    data = req.get_body()
+    
+    pdf_document = pymupdf.open('pdf', BytesIO(data))
+
+    extracted_text = ""
+
+    # Iterate over all the pages
+    for page in range(len(pdf_document)):
+        # Get the text from the page
+        page_text = pdf_document[page].get_text() + '\n'
+        # Append the text to the extracted_text string
+        extracted_text += page_text
+
+    return json.dumps({'text': extracted_text})

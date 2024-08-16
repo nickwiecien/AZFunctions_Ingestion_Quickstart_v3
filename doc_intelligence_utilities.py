@@ -97,6 +97,7 @@ def extract_results(afr_result, source_file_name):
         page_map.append((actual_page_num, page_text, new_file_name, source_file_name))
     return page_map
 
+# Analyze a document using Azure Document Intelligence's "prebuilt-document" model
 def analyze_pdf(data):
 
     document_analysis_client = DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=AzureKeyCredential(os.environ['DOC_INTEL_KEY']))
@@ -108,6 +109,32 @@ def analyze_pdf(data):
             # Begin analysis of the document  
             poller = document_analysis_client.begin_analyze_document("prebuilt-document", data)  
             processed = True
+            
+            # Get the result of the analysis  
+            result = poller.result()  
+
+            # Convert the result to a dictionary  
+            json_result = result.to_dict()  
+        except Exception as e:
+            time.sleep(5)
+            print(e)
+
+    return json_result
+
+# Read a document using Azure Document Intelligence's "prebuilt-read" model
+def read_document(data):
+
+    document_analysis_client = DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=AzureKeyCredential(os.environ['DOC_INTEL_KEY']))
+    json_result = {}
+
+    processed = False
+    while not processed:
+        try:
+            # Begin analysis of the document  
+            start = time.time()
+            poller = document_analysis_client.begin_analyze_document("prebuilt-read", data)  
+            processed = True
+            stop = time.time()
             
             # Get the result of the analysis  
             result = poller.result()  
