@@ -2085,6 +2085,11 @@ def ocr_doc_text_speed_mode(req: func.HttpRequest) -> func.HttpResponse:
 
     # Process with document intelligence and retrieve formatted data
     text = read_document(data)
+
+    # Alternative method for text + tables
+    # analysis = analyze_pdf(data)
+    # page_map = extract_results(analysis, 'uploaded_file.pdf')
+    # text = '\n'.join([x[1] for x in page_map])
     
     return json.dumps({'text': text})
 
