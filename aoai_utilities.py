@@ -5,10 +5,39 @@ import json
 import openai
 import os
 from openai import AzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 import requests
 import re
 import logging
 
+def create_openai_client():
+    openai.api_type = "azure"
+    openai.api_base = os.environ['AOAI_ENDPOINT']
+    openai.api_version = "2023-03-15-preview"
+    
+    if('AOAI_KEY' in os.environ):
+        openai.api_key = os.environ['AOAI_KEY']
+    
+        client = AzureOpenAI(
+            azure_endpoint=os.environ['AOAI_ENDPOINT'], 
+            api_key=os.environ['AOAI_KEY'], 
+            api_version="2023-03-15-preview"
+        )
+    else:
+        token_provider = get_bearer_token_provider(
+            DefaultAzureCredential(
+                managed_identity_client_id=os.environ['UserAssignedManagedIdentityClientId'],
+            ),
+            scopes=[os.environ['AzureServicePrincipalOpenAIAudience']]
+        )
+        client = AzureOpenAI(
+            azure_endpoint=os.environ['AOAI_ENDPOINT'], 
+            credential=token_provider, 
+            api_version="2023-03-15-preview",
+            default_headers={"Ocp-Apim-Subscription-Key": os.environ['OcpApimSubscriptionKey']}
+        )
+
+    return client
 
 def generate_embeddings(text, model_name=None):
     """
@@ -22,14 +51,7 @@ def generate_embeddings(text, model_name=None):
     """
 
     # Configure OpenAI with Azure settings
-    openai.api_type = "azure"
-    openai.api_base = os.environ['AOAI_ENDPOINT']
-    openai.api_version = "2023-03-15-preview"
-    openai.api_key = os.environ['AOAI_KEY']
-
-    client = AzureOpenAI(
-        azure_endpoint=os.environ['AOAI_ENDPOINT'], api_key=os.environ['AOAI_KEY'], api_version="2023-03-15-preview"
-    )
+    client = create_openai_client()
 
     embedding_model = os.environ['AOAI_EMBEDDINGS_MODEL']
     if model_name is not None:
@@ -90,7 +112,6 @@ def get_transcription(filename):
     client = AzureOpenAI(
         api_key=os.environ['AOAI_WHISPER_KEY'], azure_endpoint=os.environ['AOAI_WHISPER_ENDPOINT'], api_version="2024-02-01"
     )
-
 
     # Attempt to transcribe the audio, retrying on failure
     while not transcribed:

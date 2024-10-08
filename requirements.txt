@@ -20,3 +20,4 @@ pillow==10.2.0
 pymupdf==1.24.0
 pymupdfb==1.24.0
 pandas==2.0.2
+azure-identity==1.16.0

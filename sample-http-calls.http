@@ -1,0 +1,42 @@
+###
+@ingestion_function_url=func-ckneto646qwz2.happygrass-e9bcdf10.eastus2.azurecontainerapps.io
+#@ingestion_function_url=localhost:8080
+@embedding_deployment_name=text-embedding-3-large-1
+###
+
+# @name create_new_index
+POST https://{{ingestion_function_url}}/api/create_new_index?code={{function_app_key}}
+Content-Type: application/json
+
+{
+    "index_stem_name": "rag-index",
+    "fields": {
+        "content": "string", 
+        "pagenumber": "int", 
+        "sourcefile": "string", 
+        "sourcepage": "string", 
+        "category": "string"
+    },
+    "description": "A detailed description of what types of documents, and their contents, will be added to the newly created index",
+    "dimensions": 3072
+}
+
+###
+
+# @name pdf_orchestrator
+POST https://{{ingestion_function_url}}/api/orchestrators/pdf_orchestrator?code={{function_app_key}}
+Content-Type: application/json
+
+{
+    "source_container": "content",
+    "extract_container": "extract",
+    "prefix_path": "",
+    "index_name": "rag-index-20241008155339",
+    "automatically_delete": false,
+    "analyze_images": false,
+    "overlapping_chunks": false,
+    "chunk_size": 100,
+    "overlap": 100,
+    "embedding_model": "{{embedding_deployment_name}}",
+    "cosmos_logging": true
+}

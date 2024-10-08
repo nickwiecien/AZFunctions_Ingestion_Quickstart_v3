@@ -2,6 +2,7 @@ from azure.ai.formrecognizer import DocumentAnalysisClient, AnalyzeResult
 from azure.core.credentials import AzureKeyCredential
 import os
 import time
+from azure.identity import DefaultAzureCredential
 
 def table_to_html(table):
     """
@@ -98,8 +99,7 @@ def extract_results(afr_result, source_file_name):
     return page_map
 
 def analyze_pdf(data):
-
-    document_analysis_client = DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=AzureKeyCredential(os.environ['DOC_INTEL_KEY']))
+    document_analysis_client = create_document_intelligence_client()
     json_result = {}
 
     processed = False
@@ -119,3 +119,13 @@ def analyze_pdf(data):
             print(e)
 
     return json_result
+
+def create_document_intelligence_client():
+    if('DOC_INTEL_KEY' in os.environ):
+        return DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=AzureKeyCredential(os.environ['DOC_INTEL_KEY']))
+    else:
+        credential = DefaultAzureCredential(
+            managed_identity_client_id=os.environ['UserAssignedManagedIdentityClientId'],
+        )
+
+        return DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=credential)

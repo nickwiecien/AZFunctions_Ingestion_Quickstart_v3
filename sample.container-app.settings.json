@@ -25,5 +25,9 @@
   "SEARCH_KEY": "",
   "SEARCH_SERVICE_NAME": "",
   "STORAGE_CONN_STR": "",
-  "WEBSITE_AUTH_ENCRYPTION_KEY": ""
+  "WEBSITE_AUTH_ENCRYPTION_KEY": "",
+  "UseManagedIdentityResourceAccess": "true",
+  "UserAssignedManagedIdentityClientId": "",
+  "OcpApimSubscriptionKey": "",
+  "AzureServicePrincipalOpenAIAudience": ""
 }

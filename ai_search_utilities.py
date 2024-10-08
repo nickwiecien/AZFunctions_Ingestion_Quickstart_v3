@@ -1,4 +1,5 @@
 from azure.core.credentials import AzureKeyCredential
+from azure.identity import DefaultAzureCredential
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes.models import (
@@ -26,14 +27,8 @@ def get_current_index(index_stem_name):
     Args:
     index_stem_name (str): The stem of the index name to filter out relevant indexes.
     """
-    # Get the search key, endpoint, and service name from environment variables
-    search_key = os.environ['SEARCH_KEY']
-    search_endpoint = os.environ['SEARCH_ENDPOINT']
-    search_service_name = os.environ['SEARCH_SERVICE_NAME']
-    
     # Connect to Azure Cognitive Search resource using the provided key and endpoint
-    credential = AzureKeyCredential(search_key)
-    client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
+    client = create_search_index_client()
     
     # List all indexes in the search service
     indexes = client.list_index_names()
@@ -70,15 +65,9 @@ def get_index_fields(index_name):
     Args:
     index_name (str): The name of the index to retrieve matching fields for.
     """
-    # Get the search key, endpoint, and service name from environment variables
-    search_key = os.environ['SEARCH_KEY']
-    search_endpoint = os.environ['SEARCH_ENDPOINT']
-    search_service_name = os.environ['SEARCH_SERVICE_NAME']
     
     # Connect to Azure Cognitive Search resource using the provided key and endpoint
-    credential = AzureKeyCredential(search_key)
-    client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
-    
+    client = create_search_index_client()
 
     # Get the index details
     index = client.get_index(index_name)
@@ -96,15 +85,10 @@ def delete_indexes(index_stem_name, age_in_minutes=60):
     index_stem_name (str): The stem of the index name to filter out relevant indexes.
     age_in_minutes (int): The age (in minutes) at which indexes should be deleted.
     """
-    # Get the search key, endpoint, and service name from environment variables
-    search_key = os.environ['SEARCH_KEY']
-    search_endpoint = os.environ['SEARCH_ENDPOINT']
-    search_service_name = os.environ['SEARCH_SERVICE_NAME']
     
     # Connect to Azure Cognitive Search resource using the provided key and endpoint
-    credential = AzureKeyCredential(search_key)
-    client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
-    
+    client = create_search_index_client()
+
     # List all indexes in the search service
     indexes = client.list_index_names()
 
@@ -137,14 +121,8 @@ def insert_documents_vector(documents, index_name):
     documents (list): The list of documents to insert.
     index_name (str): The name of the search index.
     """
-    # Get the search key, endpoint, and service name from environment variables
-    search_key = os.environ['SEARCH_KEY']
-    search_endpoint = os.environ['SEARCH_ENDPOINT']
-    search_service_name = os.environ['SEARCH_SERVICE_NAME']
-
     # Create a SearchClient object
-    credential = AzureKeyCredential(search_key)
-    client = SearchClient(endpoint=search_endpoint, index_name=index_name, credential=credential)
+    client = create_search_client()
 
     # Upload the document to the search index
     result = client.upload_documents(documents=documents)
@@ -159,14 +137,9 @@ def delete_documents_vector(documents, index_name):
     documents (list): The list of documents to insert.
     index_name (str): The name of the search index.
     """
-    # Get the search key, endpoint, and service name from environment variables
-    search_key = os.environ['SEARCH_KEY']
-    search_endpoint = os.environ['SEARCH_ENDPOINT']
-    search_service_name = os.environ['SEARCH_SERVICE_NAME']
 
     # Create a SearchClient object
-    credential = AzureKeyCredential(search_key)
-    client = SearchClient(endpoint=search_endpoint, index_name=index_name, credential=credential)
+    client = create_search_client()
 
     deleted_records = []
     retrieved_doc = None
@@ -187,11 +160,6 @@ def delete_documents_vector(documents, index_name):
 
 
 def create_vector_index(stem_name, user_fields, omit_timestamp=False, dimensions=1536):
-    # Get the search key, endpoint, and service name from environment variables
-    search_key = os.environ['SEARCH_KEY']
-    search_endpoint = os.environ['SEARCH_ENDPOINT']
-    search_service_name = os.environ['SEARCH_SERVICE_NAME']
-
     # Get the current time and format it as a string
     now =  datetime.now()
     timestamp  = datetime.strftime(now, "%Y%m%d%H%M%S")
@@ -203,8 +171,7 @@ def create_vector_index(stem_name, user_fields, omit_timestamp=False, dimensions
         index_name = stem_name
 
     # Create a SearchIndexClient object
-    credential = AzureKeyCredential(search_key)
-    client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
+    client = create_search_index_client()
 
     # Define the fields for the index
     fields = [SimpleField(name="id", type=SearchFieldDataType.String, key=True), SimpleField(name="sourcefileref", type=SearchFieldDataType.String,searchable=False, filterable=True)]
@@ -259,14 +226,33 @@ def create_update_index_alias(alias_name, target_index):
     target_index (str): The name of the index that the alias should point to.
     """
 
-    # Get the search key, endpoint, and service name from environment variables
-    search_key = os.environ['SEARCH_KEY']
     search_endpoint = os.environ['SEARCH_ENDPOINT']
     search_service_name = os.environ['SEARCH_SERVICE_NAME']
+    
+    if('SEARCH_KEY' in os.environ):
+        # Get the search key, endpoint, and service name from environment variables
+        search_key = os.environ['SEARCH_KEY']
+    
+        headers = {
+            'Content-Type': 'application/json', 
+            'api-key': search_key
+        }
+    else:
+        # Use managed identity
+        credential = DefaultAzureCredential(
+            managed_identity_client_id=os.environ['UserAssignedManagedIdentityClientId'],
+        )
+
+        access_token = credential.get_token('https://search.windows.net/.default')
+
+        headers = {
+            'Content-Type': 'application/json', 
+            'Authorization': f'Bearer {access_token.token}'
+        }
 
     # Construct the URI for alias creation
-    uri = f'https://{search_service_name}.search.windows.net/aliases?api-version=2023-07-01-Preview'
-    headers = {'Content-Type': 'application/json', 'api-key': search_key}
+    uri = f'https://{search_service_name}.search.windows.net/aliases?api-version=2023-07-01-Preview'    
+    
     payload = {
         "name": alias_name,
         "indexes": [target_index]
@@ -293,14 +279,8 @@ def get_ids_from_all_docs(target_index):
     target_index (str): The name of the index that the alias should point to.
     """
 
-    # Get the search key, endpoint, and service name from environment variables
-    search_key = os.environ['SEARCH_KEY']
-    search_endpoint = os.environ['SEARCH_ENDPOINT']
-    search_service_name = os.environ['SEARCH_SERVICE_NAME']
-
     # Create a SearchIndexClient object
-    credential = AzureKeyCredential(search_key)
-    client = SearchClient(endpoint=search_endpoint, index_name=target_index, credential=credential)
+    client = create_search_client()
 
     results = client.search(search_text="*", select="id", include_total_count=True, top=1)
 
@@ -314,3 +294,39 @@ def get_ids_from_all_docs(target_index):
         if len(captured_results) >= total_records:
             break
     return captured_results
+
+def create_search_client():
+    if('SEARCH_KEY' in os.environ):
+        search_client = SearchClient(
+            endpoint=os.environ['SEARCH_ENDPOINT'],
+            index_name=os.environ['SEARCH_INDEX_NAME'],
+            credential=AzureKeyCredential(os.environ['SEARCH_KEY'])
+        )
+    else:        
+        credential = DefaultAzureCredential(
+            managed_identity_client_id=os.environ['UserAssignedManagedIdentityClientId'],
+        )
+        search_client = SearchClient(
+            endpoint=os.environ['SEARCH_ENDPOINT'],
+            index_name=os.environ['SEARCH_INDEX_NAME'],
+            credential=credential
+        )
+
+    return search_client
+
+def create_search_index_client():
+    if('SEARCH_KEY' in os.environ):
+        search_index_client = SearchIndexClient(
+            endpoint=os.environ['SEARCH_ENDPOINT'],
+            credential=AzureKeyCredential(os.environ['SEARCH_KEY'])
+        )
+    else:        
+        credential = DefaultAzureCredential(
+            managed_identity_client_id=os.environ['UserAssignedManagedIdentityClientId'],
+        )
+        search_index_client = SearchIndexClient(
+            endpoint=os.environ['SEARCH_ENDPOINT'],
+            credential=credential
+        )
+
+    return search_index_client

@@ -16,6 +16,7 @@ import io
 import base64
 import random
 import pandas as pd
+from azure.identity import DefaultAzureCredential
 
 from doc_intelligence_utilities import analyze_pdf, extract_results
 from aoai_utilities import generate_embeddings, classify_image, analyze_image, get_transcription, generate_qna_pair_helper
@@ -25,7 +26,6 @@ import tempfile
 import subprocess
 
 app = df.DFApp(http_auth_level=func.AuthLevel.FUNCTION)
-
 
 # An HTTP-Triggered Function with a Durable Functions Client binding
 @app.route(route="orchestrators/{functionName}")
@@ -2187,17 +2187,28 @@ def get_active_index(req: func.HttpRequest) -> func.HttpResponse:
 
     return latest_index
 
+def get_cosmos_client():
+    cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
+    if 'COSMOS_KEY' in os.environ:
+        cosmos_key = os.environ['COSMOS_KEY']
+        client = CosmosClient(cosmos_endpoint, cosmos_key)
+    else:
+        credential = DefaultAzureCredential(
+            managed_identity_client_id=os.environ['UserAssignedManagedIdentityClientId']
+        )
+        client = CosmosClient(cosmos_endpoint, credential)
+    return client
+
 @app.activity_trigger(input_name="activitypayload")
 def update_status_record(activitypayload: str):
 
     # Load the activity payload as a JSON string
     data = json.loads(activitypayload)
+    
     cosmos_container = os.environ['COSMOS_CONTAINER']
     cosmos_database = os.environ['COSMOS_DATABASE']
-    cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
-    cosmos_key = os.environ['COSMOS_KEY']
 
-    client = CosmosClient(cosmos_endpoint, cosmos_key)
+    client = get_cosmos_client()
 
     # Select the database
     database = client.get_database_client(cosmos_database)
@@ -2217,11 +2228,10 @@ def create_status_record(activitypayload: str):
     cosmos_container = os.environ['COSMOS_CONTAINER']
     cosmos_database = os.environ['COSMOS_DATABASE']
     cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
-    cosmos_key = os.environ['COSMOS_KEY']
+
+    client = get_cosmos_client()
 
     data['id'] = cosmos_id
-
-    client = CosmosClient(cosmos_endpoint, cosmos_key)
 
     # Select the database
     database = client.get_database_client(cosmos_database)
@@ -2229,7 +2239,6 @@ def create_status_record(activitypayload: str):
     # Select the container
     container = database.get_container_client(cosmos_container)
 
-    # response = container.read_item(item=cosmos_id)
     response = container.create_item(data)
     if type(response) == dict:
         return response
@@ -2239,9 +2248,8 @@ def create_profile_record(data):
     cosmos_container = os.environ['COSMOS_PROFILE_CONTAINER']
     cosmos_database = os.environ['COSMOS_DATABASE']
     cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
-    cosmos_key = os.environ['COSMOS_KEY']
 
-    client = CosmosClient(cosmos_endpoint, cosmos_key)
+    client = get_cosmos_client()
 
     # Select the database
     database = client.get_database_client(cosmos_database)
@@ -2264,17 +2272,14 @@ def update_profile_record(activitypayload: str):
     cosmos_container = os.environ['COSMOS_PROFILE_CONTAINER']
     cosmos_database = os.environ['COSMOS_DATABASE']
     cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
-    cosmos_key = os.environ['COSMOS_KEY']
 
-    client = CosmosClient(cosmos_endpoint, cosmos_key)
+    client = get_cosmos_client()
 
     # Select the database
     database = client.get_database_client(cosmos_database)
 
     # Select the container
     container = database.get_container_client(cosmos_container)
-
-    query = f'select * from c where c.id="{index_name}"'
 
     response = container.read_item(item=index_name, partition_key=index_name)
 
@@ -2303,7 +2308,6 @@ def pdf_bytes_to_png_bytes(pdf_bytes, page_number=1):
 
     # Save the image to the BytesIO object using Pillow
     img.save(png_bytes_io, "PNG")
-
 
     # Rewind the BytesIO object to the beginning
     png_bytes_io.seek(0)
@@ -2337,7 +2341,6 @@ def convert_file_to_pdf(req: func.HttpRequest) -> func.HttpResponse:
     file_bytes = blob_client.download_blob().readall()
 
     try:
-
         pdf_bytes = convert_to_pdf_helper(file_bytes)
 
     except Exception as e:
@@ -2407,4 +2410,3 @@ def list_files_in_container(req: func.HttpRequest) -> func.HttpResponse:
         blobs.append(blob.name)
 
     return json.dumps(blobs)
-

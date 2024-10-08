@@ -102,13 +102,19 @@ az containerapp env workload-profile add -g <resource-group-name> -n <container-
 1. Deploy your Function App to this new workload profile.
 
 ```shell
-az functionapp create --name <function-app-name> --storage-account <storage-account-name> --environment <container-app-environment-name> --workload-profile-name func --resource-group <resource-group-name> --functions-version 4 --runtime python --image <container-registry-login-server>/ingestionfunction:1
+az functionapp create --name <function-app-name> --storage-account <storage-account-name> --environment <container-app-environment-name> --workload-profile-name func --resource-group <resource-group-name> --functions-version 4 --runtime python --image <container-registry-login-server>/ingestionfunctions:1
 ```
 
 1. Update the configuration values with your environment. You can create a local JSON file (`container-app.settings.json`, modeled on the `sample.container-app.settings` file)with all of these values and reference it in the following command. You will need to copy the various values for this file from the various Azure servies in the Portal.
 
 ```shell
 az functionapp config appsettings set -g <resource-group-name> -n <function-app-name> --settings "@container-app.settings.json"
+```
+
+1. Assign the user-assigned managed identity to the Function app
+
+```shell
+az functionapp identity assign -g <resource-group-name> -n <function-app-name> --identities <user-assigned-managed-identity-resource-id>
 ```
 
 ## Utilization & Testing
