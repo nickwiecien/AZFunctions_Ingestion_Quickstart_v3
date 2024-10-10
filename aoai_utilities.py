@@ -28,11 +28,11 @@ def create_openai_client():
             DefaultAzureCredential(
                 managed_identity_client_id=os.environ['UserAssignedManagedIdentityClientId'],
             ),
-            scopes=[os.environ['AzureServicePrincipalOpenAIAudience']]
+            [os.environ['AzureServicePrincipalOpenAIAudience']]
         )
         client = AzureOpenAI(
             azure_endpoint=os.environ['AOAI_ENDPOINT'], 
-            credential=token_provider, 
+            azure_ad_token_provider=token_provider, 
             api_version="2023-03-15-preview",
             default_headers={"Ocp-Apim-Subscription-Key": os.environ['OcpApimSubscriptionKey']}
         )
