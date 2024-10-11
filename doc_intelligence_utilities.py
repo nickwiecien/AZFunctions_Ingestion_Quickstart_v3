@@ -2,7 +2,7 @@ from azure.ai.formrecognizer import DocumentAnalysisClient, AnalyzeResult
 from azure.core.credentials import AzureKeyCredential
 import os
 import time
-from azure.identity import DefaultAzureCredential
+from azure.identity import ManagedIdentityCredential
 
 def table_to_html(table):
     """
@@ -124,8 +124,8 @@ def create_document_intelligence_client():
     if('DOC_INTEL_KEY' in os.environ):
         return DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=AzureKeyCredential(os.environ['DOC_INTEL_KEY']))
     else:
-        credential = DefaultAzureCredential(
-            managed_identity_client_id=os.environ['UserAssignedManagedIdentityClientId'],
+        credential = ManagedIdentityCredential(
+            client_id=os.environ['UserAssignedManagedIdentityClientId'],
         )
 
         return DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=credential)

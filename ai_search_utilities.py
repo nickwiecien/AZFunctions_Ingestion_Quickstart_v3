@@ -1,5 +1,5 @@
 from azure.core.credentials import AzureKeyCredential
-from azure.identity import DefaultAzureCredential
+from azure.identity import ManagedIdentityCredential
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes.models import (
@@ -303,8 +303,8 @@ def create_search_client():
             credential=AzureKeyCredential(os.environ['SEARCH_KEY'])
         )
     else:        
-        credential = DefaultAzureCredential(
-            managed_identity_client_id=os.environ['UserAssignedManagedIdentityClientId'],
+        credential = ManagedIdentityCredential(
+            client_id=os.environ['UserAssignedManagedIdentityClientId'],
         )
         search_client = SearchClient(
             endpoint=os.environ['SEARCH_ENDPOINT'],
@@ -321,8 +321,8 @@ def create_search_index_client():
             credential=AzureKeyCredential(os.environ['SEARCH_KEY'])
         )
     else:        
-        credential = DefaultAzureCredential(
-            managed_identity_client_id=os.environ['UserAssignedManagedIdentityClientId'],
+        credential = ManagedIdentityCredential(
+            client_id=os.environ['UserAssignedManagedIdentityClientId'],
         )
         search_index_client = SearchIndexClient(
             endpoint=os.environ['SEARCH_ENDPOINT'],

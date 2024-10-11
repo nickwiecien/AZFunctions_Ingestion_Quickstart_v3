@@ -16,7 +16,7 @@ import io
 import base64
 import random
 import pandas as pd
-from azure.identity import DefaultAzureCredential
+from azure.identity import ManagedIdentityCredential
 
 from doc_intelligence_utilities import analyze_pdf, extract_results
 from aoai_utilities import generate_embeddings, classify_image, analyze_image, get_transcription, generate_qna_pair_helper
@@ -2193,8 +2193,8 @@ def get_cosmos_client():
         cosmos_key = os.environ['COSMOS_KEY']
         client = CosmosClient(cosmos_endpoint, cosmos_key)
     else:
-        credential = DefaultAzureCredential(
-            managed_identity_client_id=os.environ['UserAssignedManagedIdentityClientId']
+        credential = ManagedIdentityCredential(
+            client_id=os.environ['UserAssignedManagedIdentityClientId']
         )
         client = CosmosClient(cosmos_endpoint, credential)
     return client
