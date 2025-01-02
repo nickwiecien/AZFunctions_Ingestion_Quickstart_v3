@@ -16,9 +16,10 @@ import os
 from datetime import datetime
 import requests
 import json
+from azure.identity import DefaultAzureCredential
 # from azure.search.documents.indexes.models import HnswAlgorithmConfiguration
 
-def get_current_index(index_stem_name):
+def get_current_index(index_stem_name, key_based_auth = True):
     """
     Retrieves existing Azure AI search indexes (based on a provided prefix) and returns the 
     most recently created index to the user by name.
@@ -33,7 +34,12 @@ def get_current_index(index_stem_name):
     
     # Connect to Azure Cognitive Search resource using the provided key and endpoint
     credential = AzureKeyCredential(search_key)
-    client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
+    if key_based_auth:
+        credential = AzureKeyCredential(search_key)
+        client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
+    else:
+        credential = DefaultAzureCredential()
+        client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
     
     # List all indexes in the search service
     indexes = client.list_index_names()
@@ -62,7 +68,7 @@ def get_current_index(index_stem_name):
 
     return newest_index, fields
 
-def get_index_fields(index_name):
+def get_index_fields(index_name, key_based_auth = True):
     """
     Retrieves existing Azure AI search indexes (based on a provided prefix) and returns the 
     most recently created index to the user by name.
@@ -76,8 +82,12 @@ def get_index_fields(index_name):
     search_service_name = os.environ['SEARCH_SERVICE_NAME']
     
     # Connect to Azure Cognitive Search resource using the provided key and endpoint
-    credential = AzureKeyCredential(search_key)
-    client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
+    if key_based_auth:
+        credential = AzureKeyCredential(search_key)
+        client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
+    else:
+        credential = DefaultAzureCredential()
+        client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
     
 
     # Get the index details
@@ -87,7 +97,7 @@ def get_index_fields(index_name):
     return fields
 
 
-def delete_indexes(index_stem_name, age_in_minutes=60):
+def delete_indexes(index_stem_name, age_in_minutes=60, key_based_auth = True):
     """
     Retrieves indexes (by matching stem name) and deletes those which are older than
     the user-provided age_in_minutes argument. Used for index cleanup operations.
@@ -102,8 +112,12 @@ def delete_indexes(index_stem_name, age_in_minutes=60):
     search_service_name = os.environ['SEARCH_SERVICE_NAME']
     
     # Connect to Azure Cognitive Search resource using the provided key and endpoint
-    credential = AzureKeyCredential(search_key)
-    client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
+    if key_based_auth:
+        credential = AzureKeyCredential(search_key)
+        client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
+    else:
+        credential = DefaultAzureCredential()
+        client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
     
     # List all indexes in the search service
     indexes = client.list_index_names()
@@ -129,7 +143,7 @@ def delete_indexes(index_stem_name, age_in_minutes=60):
     return indexes_to_delete
    
 
-def insert_documents_vector(documents, index_name):
+def insert_documents_vector(documents, index_name, key_based_auth = True):
     """
     Inserts a document vector into the specified search index on Azure Cognitive Search.
 
@@ -143,15 +157,19 @@ def insert_documents_vector(documents, index_name):
     search_service_name = os.environ['SEARCH_SERVICE_NAME']
 
     # Create a SearchClient object
-    credential = AzureKeyCredential(search_key)
-    client = SearchClient(endpoint=search_endpoint, index_name=index_name, credential=credential)
+    if key_based_auth:
+        credential = AzureKeyCredential(search_key)
+        client = SearchClient(endpoint=search_endpoint, index_name=index_name, credential=credential)
+    else:
+        credential = DefaultAzureCredential()
+        client = SearchClient(endpoint=search_endpoint, index_name=index_name, credential=credential)
 
     # Upload the document to the search index
     result = client.upload_documents(documents=documents)
 
     return result
 
-def delete_documents_vector(documents, index_name):
+def delete_documents_vector(documents, index_name, key_based_auth = True):
     """
     Inserts a document vector into the specified search index on Azure Cognitive Search.
 
@@ -165,8 +183,12 @@ def delete_documents_vector(documents, index_name):
     search_service_name = os.environ['SEARCH_SERVICE_NAME']
 
     # Create a SearchClient object
-    credential = AzureKeyCredential(search_key)
-    client = SearchClient(endpoint=search_endpoint, index_name=index_name, credential=credential)
+    if key_based_auth:
+        credential = AzureKeyCredential(search_key)
+        client = SearchClient(endpoint=search_endpoint, index_name=index_name, credential=credential)
+    else:
+        credential = DefaultAzureCredential()
+        client = SearchClient(endpoint=search_endpoint, index_name=index_name, credential=credential)
 
     deleted_records = []
     retrieved_doc = None
@@ -186,7 +208,7 @@ def delete_documents_vector(documents, index_name):
     return deleted_records
 
 
-def create_vector_index(stem_name, user_fields, omit_timestamp=False, dimensions=1536):
+def create_vector_index(stem_name, user_fields, omit_timestamp=False, dimensions=1536, key_based_auth = True):
     # Get the search key, endpoint, and service name from environment variables
     search_key = os.environ['SEARCH_KEY']
     search_endpoint = os.environ['SEARCH_ENDPOINT']
@@ -203,8 +225,12 @@ def create_vector_index(stem_name, user_fields, omit_timestamp=False, dimensions
         index_name = stem_name
 
     # Create a SearchIndexClient object
-    credential = AzureKeyCredential(search_key)
-    client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
+    if key_based_auth:
+        credential = AzureKeyCredential(search_key)
+        client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
+    else:
+        credential = DefaultAzureCredential()
+        client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
 
     # Define the fields for the index
     fields = [SimpleField(name="id", type=SearchFieldDataType.String, key=True), SimpleField(name="sourcefileref", type=SearchFieldDataType.String,searchable=False, filterable=True)]
@@ -248,7 +274,7 @@ def create_vector_index(stem_name, user_fields, omit_timestamp=False, dimensions
     return result.name
 
 
-def create_update_index_alias(alias_name, target_index):
+def create_update_index_alias(alias_name, target_index, key_based_auth = True):
     """
     Creates or updates an alias for a given Azure Cognitive Search index.
 
@@ -282,7 +308,7 @@ def create_update_index_alias(alias_name, target_index):
     except Exception as e:
         print(e)
 
-def get_ids_from_all_docs(target_index):
+def get_ids_from_all_docs(target_index, key_based_auth = True):
     """
     Creates or updates an alias for a given Azure Cognitive Search index.
 
@@ -299,8 +325,12 @@ def get_ids_from_all_docs(target_index):
     search_service_name = os.environ['SEARCH_SERVICE_NAME']
 
     # Create a SearchIndexClient object
-    credential = AzureKeyCredential(search_key)
-    client = SearchClient(endpoint=search_endpoint, index_name=target_index, credential=credential)
+    if key_based_auth:
+        credential = AzureKeyCredential(search_key)
+        client = SearchClient(endpoint=search_endpoint, index_name=target_index, credential=credential)
+    else:
+        credential = DefaultAzureCredential()
+        client = SearchClient(endpoint=search_endpoint, index_name=target_index, credential=credential)
 
     results = client.search(search_text="*", select="id", include_total_count=True, top=1)
 

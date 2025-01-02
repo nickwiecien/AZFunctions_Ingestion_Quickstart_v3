@@ -1,5 +1,6 @@
 from azure.ai.formrecognizer import DocumentAnalysisClient, AnalyzeResult
 from azure.core.credentials import AzureKeyCredential
+from azure.identity import DefaultAzureCredential
 import os
 import time
 
@@ -97,9 +98,12 @@ def extract_results(afr_result, source_file_name):
         page_map.append((actual_page_num, page_text, new_file_name, source_file_name))
     return page_map
 
-def analyze_pdf(data):
+def analyze_pdf(data, key_based_auth=True):
 
-    document_analysis_client = DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=AzureKeyCredential(os.environ['DOC_INTEL_KEY']))
+    if key_based_auth:
+        document_analysis_client = DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=AzureKeyCredential(os.environ['DOC_INTEL_KEY']))
+    else:
+        document_analysis_client = DocumentAnalysisClient(endpoint=os.environ['DOC_INTEL_ENDPOINT'], credential=DefaultAzureCredential())
     json_result = {}
 
     processed = False

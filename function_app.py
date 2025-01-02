@@ -25,6 +25,8 @@ from chunking_utils import create_chunks, split_text
 import tempfile
 import subprocess
 
+from azure.identity import DefaultAzureCredential
+
 app = df.DFApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 
@@ -103,6 +105,7 @@ def pdf_orchestrator(context):
     cosmos_record_id = payload.get("cosmos_record_id")
     embedding_model = payload.get("embedding_model")
     cosmos_logging = payload.get("cosmos_logging", True)
+    key_based_auth = payload.get("key_based_auth", True)
     
     if cosmos_record_id is None:
         cosmos_record_id = context.instance_id
@@ -112,7 +115,7 @@ def pdf_orchestrator(context):
     # Create a status record in cosmos that can be updated throughout the course of this ingestion job
     if cosmos_logging:
         try:
-            payload = yield context.call_activity("create_status_record", json.dumps({'cosmos_id': cosmos_record_id}))
+            payload = yield context.call_activity("create_status_record", json.dumps({'cosmos_id': cosmos_record_id, 'key_based_auth': key_based_auth}))
             context.set_custom_status('Created Cosmos Record Successfully')
         except Exception as e:
             context.set_custom_status('Failed to Create Cosmos Record')
@@ -138,6 +141,7 @@ def pdf_orchestrator(context):
         status_record['status'] = 1
         status_record['status_message'] = 'Starting Ingestion Process'
         status_record['processing_progress'] = 0.1
+        status_record['key_based_auth'] = key_based_auth
         if cosmos_logging:
             yield context.call_activity("update_status_record", json.dumps({** status_record, **{'time_key': 'time_00_initiate'}}))
     except Exception as e:
@@ -151,7 +155,7 @@ def pdf_orchestrator(context):
 
     # Confirm that all storage locations exist to support document ingestion
     try:
-        container_check = yield context.call_activity_with_retry("check_containers", retry_options, json.dumps({'source_container': source_container}))
+        container_check = yield context.call_activity_with_retry("check_containers", retry_options, json.dumps({'source_container': source_container, 'key_based_auth': key_based_auth}))
         context.set_custom_status('Document Processing Containers Checked')
         
     except Exception as e:
@@ -171,7 +175,7 @@ def pdf_orchestrator(context):
     
      # Get the list of files in the source container
     try:
-        files = yield context.call_activity_with_retry("get_source_files", retry_options, json.dumps({'source_container': source_container, 'extensions': ['.pdf'], 'prefix': prefix_path}))
+        files = yield context.call_activity_with_retry("get_source_files", retry_options, json.dumps({'source_container': source_container, 'extensions': ['.pdf'], 'prefix': prefix_path, 'key_based_auth': key_based_auth}))
         context.set_custom_status('Retrieved Source Files')
     except Exception as e:
         context.set_custom_status('Ingestion Failed During File Retrieval')
@@ -200,7 +204,7 @@ def pdf_orchestrator(context):
             # Append the file to the parent_files list
             parent_files.append(file)
             # Create a task to split the PDF file and append it to the split_pdf_tasks list
-            split_pdf_tasks.append(context.call_activity_with_retry("split_pdf_files", retry_options, json.dumps({'source_container': source_container, 'pages_container': pages_container, 'file': file})))
+            split_pdf_tasks.append(context.call_activity_with_retry("split_pdf_files", retry_options, json.dumps({'source_container': source_container, 'pages_container': pages_container, 'file': file, 'key_based_auth': key_based_auth})))
         # Execute all the split PDF tasks and get the results
         split_pdf_files = yield context.task_all(split_pdf_tasks)
         # Flatten the list of split PDF files
@@ -237,7 +241,7 @@ def pdf_orchestrator(context):
             # Append the child file to the extracted_files list
             extracted_files.append(pdf['child'])
             # Create a task to process the PDF page and append it to the extract_pdf_tasks list
-            extract_pdf_tasks.append(context.call_activity("process_pdf_with_document_intelligence", json.dumps({'child': pdf['child'], 'parent': pdf['parent'], 'pages_container': pages_container, 'doc_intel_results_container': doc_intel_results_container, 'doc_intel_formatted_results_container': doc_intel_formatted_results_container})))
+            extract_pdf_tasks.append(context.call_activity("process_pdf_with_document_intelligence", json.dumps({'child': pdf['child'], 'parent': pdf['parent'], 'pages_container': pages_container, 'doc_intel_results_container': doc_intel_results_container, 'doc_intel_formatted_results_container': doc_intel_formatted_results_container, 'key_based_auth': key_based_auth})))
         # Execute all the extract PDF tasks and get the results
         extracted_pdf_files = yield context.task_all(extract_pdf_tasks)
 
@@ -298,7 +302,7 @@ def pdf_orchestrator(context):
             # Append the child file to the extracted_files list
             extracted_files.append(pdf['child'])
             # Create a task to process the PDF chunk and append it to the extract_pdf_tasks list
-            chunking_tasks.append(context.call_activity("chunk_extracts", json.dumps({'parent': file, 'source_container': source_container, 'extract_container': extract_container, 'doc_intel_formatted_results_container': doc_intel_formatted_results_container, 'image_analysis_results_container': image_analysis_results_container, 'overlapping_chunks': overlapping_chunks, 'chunk_size': chunk_size, 'overlap': overlap})))
+            chunking_tasks.append(context.call_activity("chunk_extracts", json.dumps({'parent': file, 'source_container': source_container, 'extract_container': extract_container, 'doc_intel_formatted_results_container': doc_intel_formatted_results_container, 'image_analysis_results_container': image_analysis_results_container, 'overlapping_chunks': overlapping_chunks, 'chunk_size': chunk_size, 'overlap': overlap, 'key_based_auth': key_based_auth})))
         # Execute all the extract PDF tasks and get the results
         chunked_pdf_files = yield context.task_all(chunking_tasks)
         chunked_pdf_files = [item for sublist in chunked_pdf_files for item in sublist]
@@ -325,7 +329,7 @@ def pdf_orchestrator(context):
         generate_embeddings_tasks = []
         for file in chunked_pdf_files:
             # Create a task to generate embeddings for the extracted file and append it to the generate_embeddings_tasks list
-            generate_embeddings_tasks.append(context.call_activity("generate_extract_embeddings", json.dumps({'extract_container': extract_container, 'file': file, 'embedding_model': embedding_model})))
+            generate_embeddings_tasks.append(context.call_activity("generate_extract_embeddings", json.dumps({'extract_container': extract_container, 'file': file, 'embedding_model': embedding_model, 'key_based_auth': key_based_auth})))
         # Execute all the generate embeddings tasks and get the results
         processed_documents = yield context.task_all(generate_embeddings_tasks)
         
@@ -362,7 +366,7 @@ def pdf_orchestrator(context):
         latest_index = index_name
         
         # Get the current index and its fields
-        index_detail, fields = get_current_index(index_name)
+        index_detail, fields = get_current_index(index_name, key_based_auth)
 
         context.set_custom_status('Index Retrieval Complete')
         status_record['status_message'] = 'Index Retrieval Complete'
@@ -383,7 +387,7 @@ def pdf_orchestrator(context):
         insert_tasks = []
         for file in files:
             # Create a task to insert a record for the file and append it to the insert_tasks list
-            insert_tasks.append(context.call_activity_with_retry("insert_record", retry_options, json.dumps({'file': file, 'index': latest_index, 'fields': fields, 'extracts-container': extract_container})))
+            insert_tasks.append(context.call_activity_with_retry("insert_record", retry_options, json.dumps({'file': file, 'index': latest_index, 'fields': fields, 'extracts-container': extract_container, 'key_based_auth': key_based_auth})))
         # Execute all the insert record tasks and get the results
         insert_results = yield context.task_all(insert_tasks)
     except Exception as e:
@@ -412,10 +416,10 @@ def pdf_orchestrator(context):
     if automatically_delete:
 
         try:
-            source_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': source_container,  'prefix': prefix_path}))
-            chunk_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': pages_container,  'prefix': prefix_path}))
-            doc_intel_result_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path}))
-            extract_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': extract_container,  'prefix': prefix_path}))
+            source_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': source_container,  'prefix': prefix_path, 'key_based_auth': key_based_auth}))
+            chunk_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': pages_container,  'prefix': prefix_path, 'key_based_auth': key_based_auth}))
+            doc_intel_result_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path, 'key_based_auth': key_based_auth}))
+            extract_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': extract_container,  'prefix': prefix_path, 'key_based_auth': key_based_auth}))
 
             context.set_custom_status('Ingestion & Clean Up Completed')
             status_record['cleanup_status_message'] = 'Intermediate Data Clean Up Completed'
@@ -499,6 +503,8 @@ def audio_video_orchestrator(context):
     session_id = payload.get("session_id")
     cosmos_record_id = payload.get("cosmos_record_id")
     cosmos_logging = payload.get("cosmos_logging", True)
+    key_based_auth = payload.get("key_based_auth", True)
+
     if cosmos_record_id is None:
         cosmos_record_id = context.instance_id
     if len(cosmos_record_id)==0:
@@ -507,7 +513,7 @@ def audio_video_orchestrator(context):
     # Create a status record in cosmos that can be updated throughout the course of this ingestion job
     try:
         if cosmos_logging:
-            payload = yield context.call_activity("create_status_record", json.dumps({'cosmos_id': cosmos_record_id}))
+            payload = yield context.call_activity("create_status_record", json.dumps({'cosmos_id': cosmos_record_id, 'key_based_auth': key_based_auth}))
             context.set_custom_status('Created Cosmos Record Successfully')
     except Exception as e:
         context.set_custom_status('Failed to Create Cosmos Record')
@@ -532,6 +538,7 @@ def audio_video_orchestrator(context):
         status_record['status'] = 1
         status_record['status_message'] = 'Starting Ingestion Process'
         status_record['processing_progress'] = 0.1
+        status_record['key_based_auth'] = key_based_auth
         if cosmos_logging:
             yield context.call_activity("update_status_record", json.dumps(status_record))
     except Exception as e:
@@ -542,7 +549,7 @@ def audio_video_orchestrator(context):
     
     # Confirm that all storage locations exist to support document ingestion
     try:
-        container_check = yield context.call_activity_with_retry("check_audio_video_containers", retry_options, json.dumps({'source_container': source_container}))
+        container_check = yield context.call_activity_with_retry("check_audio_video_containers", retry_options, json.dumps({'source_container': source_container, 'key_based_auth': key_based_auth}))
         context.set_custom_status('Audio/Video Processing Containers Checked')
         
     except Exception as e:
@@ -562,7 +569,7 @@ def audio_video_orchestrator(context):
     
      # Get the list of files in the source container
     try:
-        files = yield context.call_activity_with_retry("get_source_files", retry_options, json.dumps({'source_container': source_container, 'extensions': ['.mp3', '.mp4', '.mpweg', '.mpga', '.m4a', '.wav', '.webm'], 'prefix': prefix_path}))
+        files = yield context.call_activity_with_retry("get_source_files", retry_options, json.dumps({'source_container': source_container, 'extensions': ['.mp3', '.mp4', '.mpweg', '.mpga', '.m4a', '.wav', '.webm'], 'prefix': prefix_path, 'key_based_auth': key_based_auth}))
         context.set_custom_status('Retrieved Source Files')
     except Exception as e:
         context.set_custom_status('Ingestion Failed During File Retrieval')
@@ -600,7 +607,7 @@ def audio_video_orchestrator(context):
             # Append the file to the parent_files list
             parent_files.append(file)
             # Create a task to transcribe the audio/video file and append it to the transcribe_file_tasks list
-            transcribe_file_tasks.append(context.call_activity_with_retry("transcribe_audio_video_files", retry_options, json.dumps({'source_container': source_container, 'transcripts_container': transcripts_container, 'file': file})))
+            transcribe_file_tasks.append(context.call_activity_with_retry("transcribe_audio_video_files", retry_options, json.dumps({'source_container': source_container, 'transcripts_container': transcripts_container, 'file': file, 'key_based_auth': key_based_auth})))
         transcribed_audio_files = yield context.task_all(transcribe_file_tasks)
 
     except Exception as e:
@@ -625,7 +632,7 @@ def audio_video_orchestrator(context):
     try:
         chunking_tasks = []
         for file in transcribed_audio_files:
-            chunking_tasks.append(context.call_activity("chunk_audio_video_transcripts", json.dumps({'parent': file, 'transcript_container': transcripts_container, 'extract_container': extract_container, 'overlapping_chunks': overlapping_chunks, 'chunk_size': chunk_size, 'overlap': overlap})))
+            chunking_tasks.append(context.call_activity("chunk_audio_video_transcripts", json.dumps({'parent': file, 'transcript_container': transcripts_container, 'extract_container': extract_container, 'overlapping_chunks': overlapping_chunks, 'chunk_size': chunk_size, 'overlap': overlap, 'key_based_auth': key_based_auth})))
         chunked_transcript_files = yield context.task_all(chunking_tasks)
         chunked_transcript_files = [item for sublist in chunked_transcript_files for item in sublist]
     except Exception as e:
@@ -653,7 +660,7 @@ def audio_video_orchestrator(context):
         generate_embeddings_tasks = []
         for file in chunked_transcript_files:
             # Create a task to generate embeddings for the extracted file and append it to the generate_embeddings_tasks list
-            generate_embeddings_tasks.append(context.call_activity("generate_extract_embeddings", json.dumps({'extract_container': extract_container, 'file': file, 'embedding_model': embedding_model})))
+            generate_embeddings_tasks.append(context.call_activity("generate_extract_embeddings", json.dumps({'extract_container': extract_container, 'file': file, 'embedding_model': embedding_model, 'key_based_auth': key_based_auth})))
         # Execute all the generate embeddings tasks and get the results
         processed_documents = yield context.task_all(generate_embeddings_tasks)
         
@@ -711,7 +718,7 @@ def audio_video_orchestrator(context):
         insert_tasks = []
         for file in files:
             # Create a task to insert a record for the file and append it to the insert_tasks list
-            insert_tasks.append(context.call_activity_with_retry("insert_record", retry_options, json.dumps({'file': file, 'index': latest_index, 'fields': fields, 'extracts-container': extract_container})))
+            insert_tasks.append(context.call_activity_with_retry("insert_record", retry_options, json.dumps({'file': file, 'index': latest_index, 'fields': fields, 'extracts-container': extract_container, 'key_based_auth': key_based_auth})))
         # Execute all the insert record tasks and get the results
         insert_results = yield context.task_all(insert_tasks)
     except Exception as e:
@@ -739,9 +746,9 @@ def audio_video_orchestrator(context):
     if automatically_delete:
 
         try:
-            source_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': source_container,  'prefix': prefix_path}))
-            transcript_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': transcripts_container,  'prefix': prefix_path}))
-            extract_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': extract_container,  'prefix': prefix_path}))
+            source_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': source_container,  'prefix': prefix_path, 'key_based_auth': key_based_auth}))
+            transcript_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': transcripts_container,  'prefix': prefix_path, 'key_based_auth': key_based_auth}))
+            extract_files = yield context.call_activity_with_retry("delete_source_files", retry_options, json.dumps({'source_container': extract_container,  'prefix': prefix_path, 'key_based_auth': key_based_auth}))
 
             context.set_custom_status('Ingestion & Clean Up Completed')
             status_record['cleanup_status_message'] = 'Intermediate Data Clean Up Completed'
@@ -800,6 +807,8 @@ def non_pdf_orchestrator(context):
     entra_id = payload.get("entra_id")
     session_id = payload.get("session_id")
     cosmos_record_id = payload.get("cosmos_record_id")
+    key_based_auth = payload.get("key_based_auth", True)
+
     if cosmos_record_id is None:
         cosmos_record_id = context.instance_id
     if len(cosmos_record_id)==0:
@@ -808,7 +817,7 @@ def non_pdf_orchestrator(context):
     # Create a status record in cosmos that can be updated throughout the course of this ingestion job
     try:
         if cosmos_logging:
-            payload = yield context.call_activity("create_status_record", json.dumps({'cosmos_id': cosmos_record_id}))
+            payload = yield context.call_activity("create_status_record", json.dumps({'cosmos_id': cosmos_record_id, 'key_based_auth': key_based_auth}))
             context.set_custom_status('Created Cosmos Record Successfully')
     except Exception as e:
         context.set_custom_status('Failed to Create Cosmos Record')
@@ -833,6 +842,7 @@ def non_pdf_orchestrator(context):
         status_record['status'] = 1
         status_record['status_message'] = 'Starting Ingestion Process'
         status_record['processing_progress'] = 0.1
+        status_record['key_based_auth'] = key_based_auth
         if cosmos_logging:
             yield context.call_activity("update_status_record", json.dumps(status_record))
     except Exception as e:
@@ -840,7 +850,7 @@ def non_pdf_orchestrator(context):
 
     # Get source files
     try:
-        files = yield context.call_activity_with_retry("get_source_files", retry_options, json.dumps({'source_container': source_container, 'extensions': ['.doc', '.docx', '.dot', '.dotx', '.odt', '.ott', '.fodt', '.sxw', '.stw', '.uot', '.rtf', '.txt', '.xls', '.xlsx', '.xlsm', '.xlt', '.xltx', '.ods', '.ots', '.fods', '.sxc', '.stc', '.uos', '.csv', '.ppt', '.pptx', '.pps', '.ppsx', '.pot', '.potx', '.odp', '.otp', '.fodp', '.sxi', '.sti', '.uop', '.odg', '.otg', '.fodg', '.sxd', '.std', '.svg', '.html', '.htm', '.xps', '.epub'], 'prefix': prefix_path}))
+        files = yield context.call_activity_with_retry("get_source_files", retry_options, json.dumps({'source_container': source_container, 'extensions': ['.doc', '.docx', '.dot', '.dotx', '.odt', '.ott', '.fodt', '.sxw', '.stw', '.uot', '.rtf', '.txt', '.xls', '.xlsx', '.xlsm', '.xlt', '.xltx', '.ods', '.ots', '.fods', '.sxc', '.stc', '.uos', '.csv', '.ppt', '.pptx', '.pps', '.ppsx', '.pot', '.potx', '.odp', '.otp', '.fodp', '.sxi', '.sti', '.uop', '.odg', '.otg', '.fodg', '.sxd', '.std', '.svg', '.html', '.htm', '.xps', '.epub'], 'prefix': prefix_path, 'key_based_auth': key_based_auth}))
         context.set_custom_status('Retrieved Source Files')
     except Exception as e:
         context.set_custom_status('Ingestion Failed During File Retrieval')
@@ -900,6 +910,7 @@ def delete_documents_orchestrator(context):
     index_name = payload.get("index_name")
     prefix_path = payload.get("prefix_path")
     delete_all_files = payload.get("delete_all_files")
+    key_based_auth = payload.get("key_based_auth", True)
 
     # TO-DO: Update prefix with _page and _chunk postfixes for greater precision
 
@@ -911,15 +922,15 @@ def delete_documents_orchestrator(context):
 
     prefix_path = prefix_path.split('.')[0]
 
-    source_files = yield context.call_activity("get_source_files", json.dumps({'source_container': source_container,  'prefix': prefix_path, 'extensions': ['.pdf']}))
-    page_files = yield context.call_activity("get_source_files", json.dumps({'source_container': pages_container,  'prefix': prefix_path, 'extensions': ['.pdf']}))
-    doc_intel_result_files = yield context.call_activity("get_source_files", json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path, 'extensions': ['.json']}))
-    extract_files = yield context.call_activity("get_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path, 'extensions': ['.json']}))
-    doc_intel_formatted_results_files = yield context.call_activity("get_source_files", json.dumps({'source_container': doc_intel_formatted_results_container,  'prefix': prefix_path, 'extensions': ['.json']}))
-    image_analysis_files = yield context.call_activity("get_source_files", json.dumps({'source_container': image_analysis_results_container,  'prefix': prefix_path, 'extensions': ['.json']}))
-    transcripts_files = yield context.call_activity("get_source_files", json.dumps({'source_container': transcripts_container,  'prefix': prefix_path, 'extensions': ['.json']}))
+    source_files = yield context.call_activity("get_source_files", json.dumps({'source_container': source_container,  'prefix': prefix_path, 'extensions': ['.pdf'], 'key_based_auth': key_based_auth}))
+    page_files = yield context.call_activity("get_source_files", json.dumps({'source_container': pages_container,  'prefix': prefix_path, 'extensions': ['.pdf'], 'key_based_auth': key_based_auth}))
+    doc_intel_result_files = yield context.call_activity("get_source_files", json.dumps({'source_container': doc_intel_results_container,  'prefix': prefix_path, 'extensions': ['.json'], 'key_based_auth': key_based_auth}))
+    extract_files = yield context.call_activity("get_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path, 'extensions': ['.json'], 'key_based_auth': key_based_auth}))
+    doc_intel_formatted_results_files = yield context.call_activity("get_source_files", json.dumps({'source_container': doc_intel_formatted_results_container,  'prefix': prefix_path, 'extensions': ['.json'], 'key_based_auth': key_based_auth}))
+    image_analysis_files = yield context.call_activity("get_source_files", json.dumps({'source_container': image_analysis_results_container,  'prefix': prefix_path, 'extensions': ['.json'], 'key_based_auth': key_based_auth}))
+    transcripts_files = yield context.call_activity("get_source_files", json.dumps({'source_container': transcripts_container,  'prefix': prefix_path, 'extensions': ['.json'], 'key_based_auth': key_based_auth}))
 
-    deleted_ai_search_documents = yield context.call_activity("delete_records", json.dumps({'file': extract_files, 'index': index_name, 'extracts-container': extract_container}))
+    deleted_ai_search_documents = yield context.call_activity("delete_records", json.dumps({'file': extract_files, 'index': index_name, 'extracts-container': extract_container, 'key_based_auth': key_based_auth}))
 
     deleted_extract_files = []
     deleted_doc_intel_files = []
@@ -932,37 +943,37 @@ def delete_documents_orchestrator(context):
     if delete_all_files:
         delete_extract_file_tasks = []
         for file in extract_files:
-            delete_extract_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': extract_container, 'prefix': file})))
+            delete_extract_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': extract_container, 'prefix': file, 'key_based_auth': key_based_auth})))
         deleted_extract_files = yield context.task_all(delete_extract_file_tasks)
 
         delete_doc_intel_file_tasks = []
         for file in doc_intel_result_files:
-            delete_doc_intel_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_results_container, 'prefix': file})))
+            delete_doc_intel_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_results_container, 'prefix': file, 'key_based_auth': key_based_auth})))
         deleted_doc_intel_files = yield context.task_all(delete_doc_intel_file_tasks)
 
         delete_doc_intel_formatted_file_tasks = []
         for file in doc_intel_formatted_results_files:
-            delete_doc_intel_formatted_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_formatted_results_container, 'prefix': file})))
+            delete_doc_intel_formatted_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': doc_intel_formatted_results_container, 'prefix': file, 'key_based_auth': key_based_auth})))
         deleted_doc_intel_formatted_files = yield context.task_all(delete_doc_intel_formatted_file_tasks)
 
         delete_image_analysis_file_tasks = []
         for file in image_analysis_files:
-            delete_image_analysis_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': image_analysis_results_container, 'prefix': file})))
+            delete_image_analysis_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': image_analysis_results_container, 'prefix': file, 'key_based_auth': key_based_auth})))
         deleted_image_analysis_files = yield context.task_all(delete_image_analysis_file_tasks)
 
         delete_page_file_tasks = []
         for file in page_files:
-            delete_page_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': pages_container, 'prefix': file})))
+            delete_page_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': pages_container, 'prefix': file, 'key_based_auth': key_based_auth})))
         deleted_page_files = yield context.task_all(delete_page_file_tasks)
 
         delete_source_file_tasks = []
         for file in source_files:
-            delete_source_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': source_container, 'prefix': file})))
+            delete_source_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': source_container, 'prefix': file, 'key_based_auth': key_based_auth})))
         deleted_source_files = yield context.task_all(delete_source_file_tasks)
 
         delete_transcripts_file_tasks = []
         for file in transcripts_files:
-            delete_transcripts_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': transcripts_container, 'prefix': file})))
+            delete_transcripts_file_tasks.append(context.call_activity("delete_source_files", json.dumps({'source_container': transcripts_container, 'prefix': file, 'key_based_auth': key_based_auth})))
         deleted_transcripts_files = yield context.task_all(delete_transcripts_file_tasks)
 
 
@@ -989,22 +1000,24 @@ def qna_pair_generation_orchestrator(context):
     extract_container = payload.get("extract_container")
     prefix_path = payload.get("prefix_path")
     target_pair_count = int(payload.get("target_pair_count"))
+    key_based_auth = payload.get("key_based_auth", True)
+
     if target_pair_count==0 or target_pair_count<-1:
         raise Exception("Invalid target pair count. Specify -1 to generate QnA pairs for all chunks in the collection, or specify a non-zero positive number.")
 
     # Retrieve source documents
-    source_files = yield context.call_activity("get_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path, 'extensions': ['.json']}))
+    source_files = yield context.call_activity("get_source_files", json.dumps({'source_container': extract_container,  'prefix': prefix_path, 'extensions': ['.json'], 'key_based_auth': key_based_auth}))
     context.set_custom_status('Retrieved Source Files')
 
     # Review all documents and find those with content > len(250) - shuffle and filter step
-    files_for_qna = yield context.call_activity("review_files_for_qna", json.dumps({'source_container': extract_container, 'files': source_files, 'qna_pair_count': target_pair_count}))
+    files_for_qna = yield context.call_activity("review_files_for_qna", json.dumps({'source_container': extract_container, 'files': source_files, 'qna_pair_count': target_pair_count, 'key_based_auth': key_based_auth}))
     context.set_custom_status('Reviewed and shuffled chunks')
 
     if len(files_for_qna) == 0:
         raise Exception(f'No files found in the source container matching prefix: {prefix_path}.')
    
     # Iterate over all documents and generate QnA pairs
-    data_for_qna = yield context.call_activity_with_retry("retrieve_files_for_qna", retry_options, json.dumps({'source_container': extract_container, 'files': files_for_qna, 'pair_count': target_pair_count}))
+    data_for_qna = yield context.call_activity_with_retry("retrieve_files_for_qna", retry_options, json.dumps({'source_container': extract_container, 'files': files_for_qna, 'pair_count': target_pair_count, 'key_based_auth': key_based_auth}))
     context.set_custom_status('Retrieved Files for QnA Pair Generation')
 
     qna_pairs = []
@@ -1015,7 +1028,7 @@ def qna_pair_generation_orchestrator(context):
     qna_pairs = yield context.task_all(qna_pairs_tasks)
     qna_pairs = [x for x in qna_pairs if x is not None]
 
-    saved_qna_file = yield context.call_activity("save_qna_pairs", json.dumps({'records': qna_pairs, 'source_container': extract_container}))
+    saved_qna_file = yield context.call_activity("save_qna_pairs", json.dumps({'records': qna_pairs, 'source_container': extract_container, 'key_based_auth': key_based_auth}))
     context.set_custom_status('Generated QnA Pairs')
     return saved_qna_file
 
@@ -1032,13 +1045,14 @@ def sync_index_orchestrator(context):
     # Extract the container name, index stem name, and prefix path from the payload
     extract_container = payload.get("extract_container")
     index_name = payload.get("index_name")
+    key_based_auth = payload.get("key_based_auth", True)
 
     # Get index details
     index_detail, fields = get_current_index(index_name)
     
     # Get source files
     try:
-        files = yield context.call_activity_with_retry("get_source_files", retry_options, json.dumps({'source_container': extract_container, 'extensions': ['.json']}))
+        files = yield context.call_activity_with_retry("get_source_files", retry_options, json.dumps({'source_container': extract_container, 'extensions': ['.json'], 'key_based_auth': key_based_auth}))
     except Exception as e:
         raise e
     files = [x for x in files if x is not None]
@@ -1047,7 +1061,7 @@ def sync_index_orchestrator(context):
     upsert_tasks = []
     for file in files:
         try:
-            upsert_tasks.append(context.call_activity_with_retry("upsert_record", retry_options, json.dumps({'file': file, 'index_name': index_name, 'fields': fields, 'extract_container': extract_container})))
+            upsert_tasks.append(context.call_activity_with_retry("upsert_record", retry_options, json.dumps({'file': file, 'index_name': index_name, 'fields': fields, 'extract_container': extract_container, 'key_based_auth': key_based_auth})))
         except Exception as e:
             pass
     upsert_ids = yield context.task_all(upsert_tasks) # Update to return more info (sourcefile, sourcepage)
@@ -1078,10 +1092,11 @@ def metadata_enrichment_orchestrator(context):
     metadata_container = payload.get("metadata_container")
     mapping = payload.get("mapping")
     overwrite = payload.get("overwrite")
+    key_based_auth = payload.get("key_based_auth", True)
 
     # Get extract files
     try:
-        files = yield context.call_activity_with_retry("get_source_files", retry_options, json.dumps({'source_container': extract_container, 'extensions': ['.json']}))
+        files = yield context.call_activity_with_retry("get_source_files", retry_options, json.dumps({'source_container': extract_container, 'extensions': ['.json'], 'key_based_auth': key_based_auth}))
     except Exception as e:
         raise e
     files = [x for x in files if x is not None]
@@ -1108,11 +1123,15 @@ def save_qna_pairs(activitypayload: str):
     data = json.loads(activitypayload)
     records = data.get('records')
     source_container = data.get('source_container')
+    key_based_auth = data.get("key_based_auth")
 
     qna_container = f'{source_container}-qna-pairs'
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
                                                                    
     try:
         blob_service_client.create_container(qna_container)
@@ -1167,6 +1186,7 @@ def retrieve_files_for_qna(activitypayload: str):
     source_container = data.get("source_container")
     files = data.get("files")
     pair_count = int(data.get('pair_count'))
+    key_based_auth = data.get("key_based_auth")
     
     # Shuffle files
     random.shuffle(files)
@@ -1177,7 +1197,11 @@ def retrieve_files_for_qna(activitypayload: str):
 
     return_files = []
 
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
+
     container_client = blob_service_client.get_container_client(source_container)
 
     for file in files:
@@ -1204,13 +1228,17 @@ def review_files_for_qna(activitypayload: str):
     source_container = data.get("source_container")
     files = data.get("files")
     qna_pair_count = data.get("qna_pair_count")
+    key_based_auth = data.get("key_based_auth")
     file_length_threshold = 250
     random.shuffle(files)
 
 
     
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
                                                                    
     # Get a ContainerClient object from the BlobServiceClient
     container_client = blob_service_client.get_container_client(source_container)
@@ -1249,9 +1277,13 @@ def get_source_files(activitypayload: str):
     source_container = data.get("source_container")
     extensions = data.get("extensions")
     prefix = data.get("prefix")
+    key_based_auth = data.get("key_based_auth")
     
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
     
     try:
         # Get a ContainerClient object from the BlobServiceClient
@@ -1288,9 +1320,13 @@ def delete_source_files(activitypayload: str):
     # Extract the source container, file extension, and prefix from the payload
     source_container = data.get("source_container")
     prefix = data.get("prefix")
+    key_based_auth = data.get("key_based_auth")
     
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential()) 
     
     # Get a ContainerClient object from the BlobServiceClient
     container_client = blob_service_client.get_container_client(source_container)
@@ -1320,6 +1356,7 @@ def check_containers(activitypayload: str):
 
     # Load the activity payload as a JSON string
     data = json.loads(activitypayload)
+    key_based_auth = data.get("key_based_auth")
     
     # Extract the source container, file extension, and prefix from the payload
     source_container = data.get("source_container")
@@ -1330,7 +1367,10 @@ def check_containers(activitypayload: str):
     image_analysis_results_container = f'{source_container}-image-analysis-results'
     
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     try:
         blob_service_client.create_container(doc_intel_results_container)
@@ -1363,11 +1403,15 @@ def check_audio_video_containers(activitypayload: str):
     
     # Extract the source container, file extension, and prefix from the payload
     source_container = data.get("source_container")
+    key_based_auth = data.get("key_based_auth")
     
     transcripts_container = f'{source_container}-transcripts'
     
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     try:
         blob_service_client.create_container(transcripts_container)
@@ -1387,9 +1431,13 @@ def split_pdf_files(activitypayload: str):
     source_container = data.get("source_container")
     pages_container = data.get("pages_container")
     file = data.get("file")
+    key_based_auth = data.get("key_based_auth")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
     
     # Get a ContainerClient object for the source and chunks containers
     source_container = blob_service_client.get_container_client(source_container)
@@ -1471,9 +1519,13 @@ def process_pdf_with_document_intelligence(activitypayload: str):
     pages_container = data.get("pages_container")
     doc_intel_results_container = data.get("doc_intel_results_container")
     doc_intel_formatted_results_container = data.get("doc_intel_formatted_results_container")
+    key_based_auth = data.get("key_based_auth")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the pages, Document Intelligence results, and DI formatted results containers
     pages_container_client = blob_service_client.get_container_client(container=pages_container)
@@ -1597,9 +1649,13 @@ def analyze_pages_for_embedded_visuals(activitypayload: str):
     parent = data.get("parent")
     pages_container = data.get("pages_container")
     image_analysis_results_container = data.get("image_analysis_results_container")
+    key_based_auth = data.get("key_based_auth")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Download pdf
     pages_container_client = blob_service_client.get_container_client(container=pages_container)
@@ -1672,6 +1728,7 @@ def transcribe_audio_video_files(activitypayload: str):
     source_container_name = data.get("source_container")
     transcripts_container_name = data.get("transcripts_container")
     file = data.get("file")
+    key_based_auth = data.get("key_based_auth")
 
     # Create new file names for the transcript and extract files
     transcript_file_name = file.split('.')[0] + '.json'
@@ -1684,7 +1741,10 @@ def transcribe_audio_video_files(activitypayload: str):
     id = hash_object.hexdigest()  
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the source, extract, and transcription results containers
     source_container = blob_service_client.get_container_client(source_container_name)
@@ -1762,12 +1822,16 @@ def chunk_extracts(activitypayload: str):
     overlapping_chunks = data.get("overlapping_chunks")
     chunk_size = data.get("chunk_size")
     overlap = data.get("overlap")
+    key_based_auth = data.get("key_based_auth")
 
     prefix, extension = os.path.splitext(parent)
 
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get container clients
     extract_container_client = blob_service_client.get_container_client(container=extract_container)
@@ -1899,12 +1963,16 @@ def chunk_audio_video_transcripts(activitypayload: str):
     overlapping_chunks = data.get("overlapping_chunks")
     chunk_size = data.get("chunk_size")
     overlap = data.get("overlap")
+    key_based_auth = data.get("key_based_auth")
 
     prefix = parent.split('.')[0]
 
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get container clients
     extract_container_client = blob_service_client.get_container_client(container=extract_container)
@@ -1994,9 +2062,13 @@ def generate_extract_embeddings(activitypayload: str):
     extract_container = data.get("extract_container")
     file = data.get("file")
     embedding_model = data.get('embedding_model')
+    key_based_auth = data.get("key_based_auth")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extract container
     extract_container_client = blob_service_client.get_container_client(container=extract_container)
@@ -2037,9 +2109,13 @@ def insert_record(activitypayload: str):
     index = data.get("index")
     fields = data.get("fields")
     extracts_container = data.get("extracts-container")
+    key_based_auth = data.get("key_based_auth")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extracts container
     container_client = blob_service_client.get_container_client(container=extracts_container)
@@ -2057,7 +2133,7 @@ def insert_record(activitypayload: str):
     file_data = {key: value for key, value in file_data.items() if key in fields}
 
     # Insert the file data into the specified index
-    insert_documents_vector([file_data], index)
+    insert_documents_vector([file_data], index, key_based_auth)
 
     # Return the file name
     return file
@@ -2073,9 +2149,13 @@ def upsert_record(activitypayload: str):
     index = data.get("index_name")
     fields = data.get("fields")
     extracts_container = data.get("extract_container")
+    key_based_auth = data.get("key_based_auth")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extracts container
     container_client = blob_service_client.get_container_client(container=extracts_container)
@@ -2093,7 +2173,7 @@ def upsert_record(activitypayload: str):
     file_data = {key: value for key, value in file_data.items() if key in fields}
 
     # Insert the file data into the specified index
-    insert_documents_vector([file_data], index)
+    insert_documents_vector([file_data], index, key_based_auth)
 
     # Return the file name
     return {'id': file_data['id'], 'sourcefile': file_data['sourcefile'], 'sourcepage': file_data['sourcepage']}
@@ -2108,9 +2188,13 @@ def delete_records(activitypayload: str):
     file = data.get("file")
     index = data.get("index")
     extracts_container = data.get("extracts-container")
+    key_based_auth = data.get("key_based_auth", True)
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extracts container
     container_client = blob_service_client.get_container_client(container=extracts_container)
@@ -2143,8 +2227,9 @@ def get_ai_index_record_ids(activitypayload: str):
 
     # Extract the file name, index, fields, and extracts container from the payload
     index = data.get("index_name")
+    key_based_auth = data.get("key_based_auth")
 
-    record_ids = get_ids_from_all_docs(index)
+    record_ids = get_ids_from_all_docs(index, key_based_auth)
 
     # Return the file name
     return record_ids
@@ -2159,13 +2244,14 @@ def sync_ai_index(activitypayload: str):
     index = data.get("index_name")
     index_ids = data.get("index_ids")
     expected_ids = data.get("expected_ids")
+    key_based_auth = data.get("key_based_auth")
 
     expected_ids = [x['id'] for x in expected_ids]
 
     ids_to_remove = [x for x in index_ids if x not in expected_ids]
     docs_to_remove = [{'id': x} for x in ids_to_remove]
 
-    deleted_records = delete_documents_vector(docs_to_remove, index)
+    deleted_records = delete_documents_vector(docs_to_remove, index, key_based_auth)
 
     return_records = []
     for record in deleted_records:
@@ -2182,13 +2268,17 @@ def convert_pdf_activity(activitypayload: str):
     # Extract the index stem name from the payload
     container = data.get("container")
     filename = data.get("filename")
+    key_based_auth = data.get("key_based_auth")
 
     root_filename, extension = os.path.splitext(filename)
 
     updated_filename = root_filename + '.pdf'
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    if not key_based_auth:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    else:
+        blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extracts container
     container_client = blob_service_client.get_container_client(container=container)
@@ -2229,13 +2319,14 @@ def create_new_index(req: func.HttpRequest) -> func.HttpResponse:
     description = data.get("description")
     omit_timestamp = data.get("omit_timestamp")
     dimensions = data.get("dimensions")
+    key_based_auth = data.get("key_based_auth", True)
 
     # fields = {
     #     "content": "string", "pagenumber": "int", "sourcefile": "string", "sourcepage": "string", "category": "string"
     # }
 
     # Call the function to create a vector index with the specified stem name and fields
-    response = create_vector_index(stem_name, fields, omit_timestamp, dimensions)
+    response = create_vector_index(stem_name, fields, omit_timestamp, dimensions, key_based_auth)
 
     # Return the response
     return response
@@ -2247,9 +2338,10 @@ def get_active_index(req: func.HttpRequest) -> func.HttpResponse:
     data = req.get_json()
     # Extract the index stem name from the payload
     stem_name = data.get("index_stem_name")
+    key_based_auth = data.get("key_based_auth", True)
     
     # Call the function to get the current index for the specified stem name
-    latest_index, fields = get_current_index(stem_name)
+    latest_index, fields = get_current_index(stem_name, key_based_auth)
 
     return latest_index
 
@@ -2258,6 +2350,7 @@ def update_status_record(activitypayload: str):
 
     # Load the activity payload as a JSON string
     data = json.loads(activitypayload)
+    key_based_auth = data.get("key_based_auth")
     try:
         if 'time_key' in data.keys():
             data[data['time_key']] = datetime.now().isoformat()
@@ -2269,7 +2362,10 @@ def update_status_record(activitypayload: str):
     cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
     cosmos_key = os.environ['COSMOS_KEY']
 
-    client = CosmosClient(cosmos_endpoint, cosmos_key)
+    if key_based_auth:
+        client = CosmosClient(cosmos_endpoint, cosmos_key)
+    else:
+        client = CosmosClient(cosmos_endpoint, credential=DefaultAzureCredential())
 
     # Select the database
     database = client.get_database_client(cosmos_database)
@@ -2292,6 +2388,8 @@ def create_status_record(activitypayload: str):
     # Load the activity payload as a JSON string
     data = json.loads(activitypayload)
     cosmos_id = data.get("cosmos_id")
+    key_based_auth = data.get("key_based_auth")
+
     cosmos_container = os.environ['COSMOS_CONTAINER']
     cosmos_database = os.environ['COSMOS_DATABASE']
     cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
@@ -2299,7 +2397,10 @@ def create_status_record(activitypayload: str):
 
     data['id'] = cosmos_id
 
-    client = CosmosClient(cosmos_endpoint, cosmos_key)
+    if key_based_auth:
+        client = CosmosClient(cosmos_endpoint, cosmos_key)
+    else:
+        client = CosmosClient(cosmos_endpoint, credential=DefaultAzureCredential())
 
     # Select the database
     database = client.get_database_client(cosmos_database)

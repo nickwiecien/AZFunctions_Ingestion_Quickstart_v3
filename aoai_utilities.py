@@ -8,9 +8,10 @@ from openai import AzureOpenAI
 import requests
 import re
 import logging
+from azure.identity import DefaultAzureCredential
 
 
-def generate_embeddings(text, model_name=None):
+def generate_embeddings(text, model_name=None, key_based_auth=True):
     """
     Generates embeddings for the given text using the specified embeddings model provided by OpenAI.
 
@@ -115,7 +116,7 @@ def get_transcription(filename):
     # If no transcript was generated, raise an exception
     raise Exception("No transcript generated")
 
-def classify_image(b64_image_bytes):
+def classify_image(b64_image_bytes, key_based_auth=True):
     classification_msg = """
     You review images of individual document pages and determine if there is non-textual 
     visual content such as charts, graphs, diagrams, infographics, reference photographs, 
@@ -184,7 +185,7 @@ def classify_image(b64_image_bytes):
         return False
     
 
-def analyze_image(b64_image_bytes):
+def analyze_image(b64_image_bytes, key_based_auth=True):
     classification_msg = """
     You review images of individual document pages and describe non-textual visual content such as charts, 
     graphs, diagrams, infographics, reference photographs, screenshots, 3D models, or flowcharts.
@@ -260,7 +261,7 @@ def analyze_image(b64_image_bytes):
     return out_str
         
 
-def generate_qna_pair_helper(content):
+def generate_qna_pair_helper(content, key_based_auth=True):
     sys_msg = """You are a helpful AI assistant who reviews snippets of documents and generates a question and answer pair that can be UNIQUELY answered by the content within the provided document. 
     The question-answer pair you generate should be specific to the underlying information in the provided documents, rather than a question about the document itself. 
     To the extent possible, these questions should cover broader ideas.
