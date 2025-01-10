@@ -2230,10 +2230,6 @@ def create_new_index(req: func.HttpRequest) -> func.HttpResponse:
     omit_timestamp = data.get("omit_timestamp")
     dimensions = data.get("dimensions")
 
-    # fields = {
-    #     "content": "string", "pagenumber": "int", "sourcefile": "string", "sourcepage": "string", "category": "string"
-    # }
-
     # Call the function to create a vector index with the specified stem name and fields
     response = create_vector_index(stem_name, fields, omit_timestamp, dimensions)
 
@@ -2268,6 +2264,7 @@ def update_status_record(activitypayload: str):
     cosmos_database = os.environ['COSMOS_DATABASE']
     cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
     cosmos_key = os.environ['COSMOS_KEY']
+    entra_id = data.get("entra_id")
 
     client = CosmosClient(cosmos_endpoint, cosmos_key)
 
@@ -2278,7 +2275,7 @@ def update_status_record(activitypayload: str):
     container = database.get_container_client(cosmos_container)
 
     try:
-        existing_item = container.read_item(item=data['id'], partition_key=data['id'])
+        existing_item = container.read_item(item=data['id'], partition_key=entra_id)
         existing_item.update(data)
         response = container.upsert_item(existing_item)
     except Exception as e:
