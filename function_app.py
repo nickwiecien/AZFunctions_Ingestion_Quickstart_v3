@@ -298,7 +298,7 @@ def pdf_orchestrator(context):
             # Append the child file to the extracted_files list
             extracted_files.append(pdf['child'])
             # Create a task to process the PDF chunk and append it to the extract_pdf_tasks list
-            chunking_tasks.append(context.call_activity("chunk_extracts", json.dumps({'parent': file, 'source_container': source_container, 'extract_container': extract_container, 'doc_intel_formatted_results_container': doc_intel_formatted_results_container, 'image_analysis_results_container': image_analysis_results_container, 'overlapping_chunks': overlapping_chunks, 'chunk_size': chunk_size, 'overlap': overlap})))
+            chunking_tasks.append(context.call_activity("chunk_extracts", json.dumps({'parent': file, 'source_container': source_container, 'extract_container': extract_container, 'doc_intel_formatted_results_container': doc_intel_formatted_results_container, 'image_analysis_results_container': image_analysis_results_container, 'overlapping_chunks': overlapping_chunks, 'chunk_size': chunk_size, 'overlap': overlap, 'entra_id': entra_id, 'session_id': session_id})))
         # Execute all the extract PDF tasks and get the results
         chunked_pdf_files = yield context.task_all(chunking_tasks)
         chunked_pdf_files = [item for sublist in chunked_pdf_files for item in sublist]
@@ -625,7 +625,7 @@ def audio_video_orchestrator(context):
     try:
         chunking_tasks = []
         for file in transcribed_audio_files:
-            chunking_tasks.append(context.call_activity("chunk_audio_video_transcripts", json.dumps({'parent': file, 'transcript_container': transcripts_container, 'extract_container': extract_container, 'overlapping_chunks': overlapping_chunks, 'chunk_size': chunk_size, 'overlap': overlap})))
+            chunking_tasks.append(context.call_activity("chunk_audio_video_transcripts", json.dumps({'parent': file, 'transcript_container': transcripts_container, 'extract_container': extract_container, 'overlapping_chunks': overlapping_chunks, 'chunk_size': chunk_size, 'overlap': overlap, 'entra_id': entra_id, 'session_id': session_id})))
         chunked_transcript_files = yield context.task_all(chunking_tasks)
         chunked_transcript_files = [item for sublist in chunked_transcript_files for item in sublist]
     except Exception as e:
@@ -1762,6 +1762,8 @@ def chunk_extracts(activitypayload: str):
     overlapping_chunks = data.get("overlapping_chunks")
     chunk_size = data.get("chunk_size")
     overlap = data.get("overlap")
+    entra_id = data.get("entra_id")
+    session_id = data.get("session_id")
 
     prefix, extension = os.path.splitext(parent)
 
@@ -1815,6 +1817,8 @@ def chunk_extracts(activitypayload: str):
             id = hash_object.hexdigest()
 
             extract_data['id'] = id
+            extract_data['entra_id'] = entra_id
+            extract_data['session_id'] = session_id
 
             for k,v in parent_metadata.items():
                 extract_data[k] = v
@@ -1855,6 +1859,8 @@ def chunk_extracts(activitypayload: str):
             id = hash_object.hexdigest()
 
             extract_data['id'] = id
+            extract_data['entra_id'] = entra_id
+            extract_data['session_id'] = session_id
 
             for k,v in parent_metadata.items():
                 extract_data[k] = v
@@ -1899,6 +1905,8 @@ def chunk_audio_video_transcripts(activitypayload: str):
     overlapping_chunks = data.get("overlapping_chunks")
     chunk_size = data.get("chunk_size")
     overlap = data.get("overlap")
+    entra_id = data.get("entra_id")
+    session_id = data.get("session_id")
 
     prefix = parent.split('.')[0]
 
@@ -1942,6 +1950,8 @@ def chunk_audio_video_transcripts(activitypayload: str):
                 extract_data['sourcefile'] = transcript_data['sourcefile']
                 extract_data['chunkcount'] = idx
                 extract_data['sourcefileref'] = hashlib.md5(extract_data['sourcefile'].encode()).hexdigest() + '.' + extract_data['sourcefile'].split('.')[-1]
+                extract_data['entra_id'] = entra_id
+                extract_data['session_id'] = session_id 
 
                 filename = file.split('.')[0] + f'_chunk_{idx}.json'
 
@@ -1974,6 +1984,8 @@ def chunk_audio_video_transcripts(activitypayload: str):
                 extract_data['chunkcount'] = idx+1
                 extract_data['category'] = transcript_data['category']
                 extract_data['sourcefileref'] = hashlib.md5(extract_data['sourcefile'].encode()).hexdigest() + '.' + extract_data['sourcefile'].split('.')[-1]
+                extract_data['entra_id'] = entra_id
+                extract_data['session_id'] = session_id
 
                 filename = file.split('.')[0] + f'_chunk_{idx+1}.json'
 
@@ -2373,6 +2385,33 @@ def create_profile_record(data):
     response = container.create_item(data)
     if type(response) == dict:
         return response
+    
+@app.route(route="get_cosmos_status_record", auth_level=func.AuthLevel.FUNCTION)
+def get_cosmos_status_record(req: func.HttpRequest) -> func.HttpResponse:
+
+    # Load the activity payload as a JSON string
+    data = req.get_json()
+    cosmos_id = data.get("cosmos_id")
+    partition_key = data.get("partition_key")
+    cosmos_container = os.environ['COSMOS_CONTAINER']
+    cosmos_database = os.environ['COSMOS_DATABASE']
+    cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
+    cosmos_key = os.environ['COSMOS_KEY']
+
+    client = CosmosClient(cosmos_endpoint, cosmos_key)
+
+    # Select the database
+    database = client.get_database_client(cosmos_database)
+
+    # Select the container
+    container = database.get_container_client(cosmos_container)
+
+    # response = container.read_item(item=cosmos_id)
+    response = container.read_item(item=cosmos_id, partition_key=partition_key)
+    return json.dumps(response)
+    # if type(response) == dict:
+    #     return response
+    # return json.loads(response)
 
 @app.activity_trigger(input_name="activitypayload")
 def update_profile_record(activitypayload: str):
