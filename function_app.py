@@ -17,6 +17,7 @@ from PIL import Image
 import io
 import base64
 import random
+import time
 import pandas as pd
 from azure.mgmt.datafactory import DataFactoryManagementClient
 from azure.mgmt.datafactory.models import TriggerResource
@@ -2535,15 +2536,20 @@ def create_update_cosmos_profile(req: func.HttpRequest) -> func.HttpResponse:
     source_container = container_stem + '-source'
     extract_container = container_stem + '-extract'
     index_name = ''
+    existing_upload_trigger_name = os.environ["REFERENCE_UPLOAD_TRIGGER_NAME"]
+    existing_delete_trigger_name = os.environ["REFERENCE_DELETE_TRIGGER_NAME"]
+
+    new_upload_trigger_name = f"{root_name}_FileUpload"
+    new_delete_trigger_name = f"{root_name}_FileDelete"
 
     try:
         existing_item = container.read_item(item=data['id'], partition_key=data['id'])
-        if 'IngestionRecords' in existing_item and 'source_container' in existing_item['IngestionRecords']:
+        if 'IngestionSettings' in existing_item and 'source_container' in existing_item['IngestionSettings']:
             storage_created = True
-        if 'DocumentRetrievalIndexName' in existing_item:
+        if 'RAGSettings' in existing_item and 'DocumentRetrievalIndexName' in existing_item['RAGSettings']:
             search_created = True
-            index_name = existing_item['DocumentRetrievalIndexName']
-        if 'ADFTrigger' in existing_item:
+            index_name = existing_item['RAGSettings']['DocumentRetrievalIndexName']
+        if 'IngestionSettings' in existing_item and 'upload_trigger' in existing_item['IngestionSettings']:
             adf_trigger_created = True
     except Exception as e:
         pass
@@ -2570,67 +2576,87 @@ def create_update_cosmos_profile(req: func.HttpRequest) -> func.HttpResponse:
         subscription_id = os.environ['SUBSCRIPTION_ID']      # e.g. "12345678-1234-1234-1234-123456789abc"
         resource_group = os.environ['RESOURCE_GROUP_NAME']   # e.g. "myResourceGroup"
         factory_name   = os.environ['DATA_FACTORY_NAME']     # e.g. "myDataFactory"
-        existing_upload_trigger_name = os.environ["REFERENCE_UPLOAD_TRIGGER_NAME"]
-        existing_delete_trigger_name = os.environ["REFERENCE_DELETE_TRIGGER_NAME"]
-
-        new_upload_trigger_name = f"{root_name}_FileUpload"
-        new_delete_trigger_name = f"{root_name}_FileDelete"
 
         credential = DefaultAzureCredential()
         adf_client = DataFactoryManagementClient(credential, subscription_id)
 
-      
-        existing_trigger = adf_client.triggers.get(
+        ## ADF UPLOAD TRIGGER
+        existing_upload_trigger = adf_client.triggers.get(
             resource_group_name=resource_group,
             factory_name=factory_name,
             trigger_name=existing_upload_trigger_name,
         )
-        stop = adf_client.triggers.begin_stop(resource_group_name=resource_group, factory_name=factory_name, trigger_name=existing_upload_trigger_name).wait()
-        stop.result()
+
+        try:
+            stop = adf_client.triggers.begin_stop(resource_group_name=resource_group, factory_name=factory_name, trigger_name=new_upload_trigger_name)
+            while stop:
+                print("Stopping trigger...")
+                stop = adf_client.triggers.get(resource_group, factory_name, new_upload_trigger_name)
+                time.sleep(1)
+                if stop.properties.runtime_state == "Stopped":
+                    time.sleep(1)
+                    print("Trigger stopped successfully.")
+                    break
+        except Exception as e:
+            pass
         
-        new_properties = existing_trigger.properties
+        new_properties = existing_upload_trigger.properties
         new_properties.blob_path_begins_with = f'/{source_container}/blobs/'
         new_properties.pipelines[0].parameters['source_container'] = source_container
         new_properties.pipelines[0].parameters['extract_container'] = extract_container
         new_properties.pipelines[0].parameters['index_name'] = index_name
 
-        new_trigger_resource = TriggerResource(
+        new_upload_trigger_resource = TriggerResource(
             properties=new_properties,
         )
-        new_trigger_resource.name = new_upload_trigger_name
+        new_upload_trigger_resource.name = new_upload_trigger_name
 
         response = adf_client.triggers.create_or_update(
             resource_group_name=resource_group,
             factory_name=factory_name,
             trigger_name=new_upload_trigger_name,           # This is the actual name used in Azure
-            trigger=new_trigger_resource
+            trigger=new_upload_trigger_resource
         )
         adf_client.triggers.begin_start(resource_group_name=resource_group, factory_name=factory_name, trigger_name=new_upload_trigger_name).wait()
         
-
-        existing_trigger = adf_client.triggers.get(
+        ## ADF DELETE TRIGGER
+        existing_delete_trigger = adf_client.triggers.get(
             resource_group_name=resource_group,
             factory_name=factory_name,
             trigger_name=existing_delete_trigger_name,
         )
-        poller = adf_client.triggers.begin_stop(resource_group_name=resource_group, factory_name=factory_name, trigger_name=existing_delete_trigger_name).wait()
-    
+        
+        new_properties = existing_delete_trigger.properties
+        new_properties.blob_path_begins_with = f'/{source_container}/blobs/'
+        new_properties.pipelines[0].parameters['source_container'] = source_container
+        new_properties.pipelines[0].parameters['extract_container'] = extract_container
+        new_properties.pipelines[0].parameters['index_name'] = index_name
 
-        new_trigger_resource = TriggerResource(
+        try:
+            stop = adf_client.triggers.begin_stop(resource_group_name=resource_group, factory_name=factory_name, trigger_name=new_delete_trigger_name)
+            while stop:
+                print("Stopping trigger...")
+                stop = adf_client.triggers.get(resource_group, factory_name, new_delete_trigger_name)
+                time.sleep(1)
+                if stop.properties.runtime_state == "Stopped":
+                    print("Trigger stopped successfully.")
+                    time.sleep(1)
+                    break
+        except Exception as e:
+            pass
+
+        new_delete_trigger_resource = TriggerResource(
             properties=new_properties,
         )
-        new_trigger_resource.name = new_delete_trigger_name
+        new_delete_trigger_resource.name = new_delete_trigger_name
 
         response = adf_client.triggers.create_or_update(
             resource_group_name=resource_group,
             factory_name=factory_name,
             trigger_name=new_delete_trigger_name,           # This is the actual name used in Azure
-            trigger=new_trigger_resource
+            trigger=new_delete_trigger_resource
         )
-        adf_client.triggers.begin_start(resource_group_name=resource_group, factory_name=factory_name, trigger_name=new_delete_trigger_name).wait()
-
-
-
+        adf_client.triggers.begin_start(resource_group_name=resource_group, factory_name=factory_name, trigger_name=new_delete_trigger_name)
 
     default_record = {
         "Name": root_name,
