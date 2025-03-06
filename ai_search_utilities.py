@@ -12,6 +12,7 @@ from azure.search.documents.indexes.models import (
     HnswAlgorithmConfiguration, 
     VectorSearchProfile
 )
+from azure.identity import DefaultAzureCredential
 import os
 from datetime import datetime
 import requests

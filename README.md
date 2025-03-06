@@ -153,9 +153,9 @@ POST to `https://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/get_active_ind
 | `index_name`            | `str`   | The name of the index to which the documents will be added.                                   |  
 | `automatically_delete`  | `bool`  | A flag indicating whether to automatically delete intermediate data.                          |  
 | `analyze_images`        | `bool`  | A flag indicating whether to analyze images for embedded visuals, and append descriptions to processed chunks. |  
-| `overlapping_chunks`    | `bool`  | A flag indicating whether to create overlapping chunks. If false, page-wise chunks will be created with no overlap. |  
-| `chunk_size`            | `int`   | The size of the chunks to be created in tokens.                                               |  
-| `overlap`               | `int`   | The amount of overlap between chunks in tokens.                                               |  
+| `chunking_strategy`    | `str`  | A string indicating what chunking strategy to use. Supported options are: `semantic` (recommended), `pagewise`, and `fixed_size` |  
+| `max_chunk_size`            | `int`   | The size of the chunks to be created in tokens. For semantic chunking this is the largest allowed chunk size.                                              |  
+| `chunk_overlap`               | `int`   | The amount of overlap between chunks in tokens (used only for `fixed_size` chunking).                                               |  
 | `embedding_model`       | `str`   | The name of the Azure OpenAI embedding model deployment                                       | 
 | `cosmos_logging`        | `bool`  | A flag indicating whether or not to publish logs to Cosmos DB                                 |  
 
@@ -172,9 +172,9 @@ POST to `https://<YOUR-AZURE-FUNCTION-NAME>.azurewebsites.net/api/orchestrators/
     "index_name": "<YOUR_INDEX_NAME>",
     "automatically_delete": <TRUE_OR_FALSE>,
     "analyze_images": <TRUE_OR_FALSE>,
-    "overlapping_chunks": <TRUE_OR_FALSE>,
-    "chunk_size": <CHUNK_SIZE_IN_TOKENS>,
-    "overlap": <OVERLAP_SIZE_IN_TOKENS>,
+    "chunking_strategy": "<SELECTED_CHUNKING_STRATEGY>",
+    "max_chunk_size": <MAX_CHUNK_SIZE_IN_TOKENS>,
+    "chunk_overlap": <OVERLAP_SIZE_IN_TOKENS>,
     "embedding_model": "<AOAI_EMBEDDING_MODEL_DEPLOYMENT_NAME>",
     "cosmos_logging": "<TRUE_OR_FALSE>",
 }
@@ -188,6 +188,9 @@ To test your deployment and confirm everything is working as expected, use the [
 ### Orchestrators
 The project contains orchestrators tailored for specific data types:
 - `pdf_orchestrator`: Orchestrates the processing of PDF files, including chunking, extracting text & tables, generating embeddings, insertion into an Azure AI Search index, and cleanup of staged processing data.
+- `non_pdf_orchestrator`: Orchestrates the processing of unstructured text files not in PDF format (Word, PowerPoint, HTML, etc.) including all steps listed above.
+- `audio_video_orchestrator`: Orchestrates the processing of audio & video files, including transcript generation using OpenAI's whisper model followed by chunking, extracting text & tables, generating embeddings, insertion into an Azure AI Search index, and cleanup of staged processing data.
+- `main_orchestrator`: General purpose orchestrator which determines file types and routes to the appropriate ingestion orchestrator.
 - `delete_documents_orchestrator`: Orchestrates the deletion of processed documents within your Azure Storage Account and Azure AI Search Index.
 
 ### Activities
