@@ -1319,7 +1319,7 @@ def save_qna_pairs(activitypayload: str):
     qna_container = f'{source_container}-qna-pairs'
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
                                                                    
     try:
         blob_service_client.create_container(qna_container)
@@ -1384,7 +1384,7 @@ def retrieve_files_for_qna(activitypayload: str):
 
     return_files = []
 
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
     container_client = blob_service_client.get_container_client(source_container)
 
     for file in files:
@@ -1417,7 +1417,7 @@ def review_files_for_qna(activitypayload: str):
 
     
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
                                                                    
     # Get a ContainerClient object from the BlobServiceClient
     container_client = blob_service_client.get_container_client(source_container)
@@ -1458,7 +1458,7 @@ def get_source_files(activitypayload: str):
     prefix = data.get("prefix")
     
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
     
     try:
         # Get a ContainerClient object from the BlobServiceClient
@@ -1497,7 +1497,7 @@ def delete_source_files(activitypayload: str):
     prefix = data.get("prefix")
     
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
     
     # Get a ContainerClient object from the BlobServiceClient
     container_client = blob_service_client.get_container_client(source_container)
@@ -1537,7 +1537,7 @@ def check_containers(activitypayload: str):
     image_analysis_results_container = f'{source_container}-image-analysis-results'
     
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     try:
         blob_service_client.create_container(doc_intel_results_container)
@@ -1574,7 +1574,7 @@ def check_audio_video_containers(activitypayload: str):
     transcripts_container = f'{source_container}-transcripts'
     
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     try:
         blob_service_client.create_container(transcripts_container)
@@ -1596,7 +1596,7 @@ def split_pdf_files(activitypayload: str):
     file = data.get("file")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
     
     # Get a ContainerClient object for the source and chunks containers
     source_container = blob_service_client.get_container_client(source_container)
@@ -1680,7 +1680,7 @@ def process_pdf_with_document_intelligence(activitypayload: str):
     doc_intel_formatted_results_container = data.get("doc_intel_formatted_results_container")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the pages, Document Intelligence results, and DI formatted results containers
     pages_container_client = blob_service_client.get_container_client(container=pages_container)
@@ -1806,7 +1806,7 @@ def analyze_pages_for_embedded_visuals(activitypayload: str):
     image_analysis_results_container = data.get("image_analysis_results_container")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Download pdf
     pages_container_client = blob_service_client.get_container_client(container=pages_container)
@@ -1891,7 +1891,7 @@ def transcribe_audio_video_files(activitypayload: str):
     id = hash_object.hexdigest()  
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the source, extract, and transcription results containers
     source_container = blob_service_client.get_container_client(source_container_name)
@@ -1973,7 +1973,7 @@ def chunk_extracts(activitypayload: str):
 
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get container clients
     extract_container_client = blob_service_client.get_container_client(container=extract_container)
@@ -2162,7 +2162,7 @@ def chunk_audio_video_transcripts(activitypayload: str):
 
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get container clients
     extract_container_client = blob_service_client.get_container_client(container=extract_container)
@@ -2287,7 +2287,7 @@ def generate_extract_embeddings(activitypayload: str):
     embedding_model = data.get('embedding_model')
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extract container
     extract_container_client = blob_service_client.get_container_client(container=extract_container)
@@ -2330,7 +2330,7 @@ def insert_record(activitypayload: str):
     extracts_container = data.get("extracts-container")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extracts container
     container_client = blob_service_client.get_container_client(container=extracts_container)
@@ -2366,7 +2366,7 @@ def upsert_record(activitypayload: str):
     extracts_container = data.get("extract_container")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extracts container
     container_client = blob_service_client.get_container_client(container=extracts_container)
@@ -2401,7 +2401,7 @@ def delete_records(activitypayload: str):
     extracts_container = data.get("extracts-container")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extracts container
     container_client = blob_service_client.get_container_client(container=extracts_container)
@@ -2479,7 +2479,7 @@ def convert_pdf_activity(activitypayload: str):
     updated_filename = root_filename + '.pdf'
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extracts container
     container_client = blob_service_client.get_container_client(container=container)
@@ -2512,7 +2512,7 @@ def get_orchestration_path(activitypayload: str):
     container = data.get("container")
     file = data.get("file")
 
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
     container_client = blob_service_client.get_container_client(container=container)
 
     blob_client = container_client.get_blob_client(blob=file)
@@ -2585,7 +2585,8 @@ def update_status_record(activitypayload: str):
     cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
     cosmos_key = os.environ['COSMOS_KEY']
 
-    client = CosmosClient(cosmos_endpoint, cosmos_key)
+    # client = CosmosClient(cosmos_endpoint, cosmos_key)
+    client = CosmosClient(cosmos_endpoint, credential=DefaultAzureCredential())
 
     # Select the database
     database = client.get_database_client(cosmos_database)
@@ -2615,7 +2616,7 @@ def create_status_record(activitypayload: str):
 
     data['id'] = cosmos_id
 
-    client = CosmosClient(cosmos_endpoint, cosmos_key)
+    client = CosmosClient(cosmos_endpoint, credential=DefaultAzureCredential())
 
     # Select the database
     database = client.get_database_client(cosmos_database)
@@ -2641,7 +2642,7 @@ def enrich_extract_metadata(activitypayload: str):
     overwrite = data.get("overwrite")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     extract_container_client = blob_service_client.get_container_client(extract_container)
     metadata_container_client = blob_service_client.get_container_client(metadata_container)
@@ -2680,7 +2681,7 @@ def create_profile_record(data):
     cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
     cosmos_key = os.environ['COSMOS_KEY']
 
-    client = CosmosClient(cosmos_endpoint, cosmos_key)
+    client = CosmosClient(cosmos_endpoint, credential=DefaultAzureCredential())
 
     # Select the database
     database = client.get_database_client(cosmos_database)
@@ -2705,7 +2706,7 @@ def update_profile_record(activitypayload: str):
     cosmos_endpoint = os.environ['COSMOS_ENDPOINT']
     cosmos_key = os.environ['COSMOS_KEY']
 
-    client = CosmosClient(cosmos_endpoint, cosmos_key)
+    client = CosmosClient(cosmos_endpoint, credential=DefaultAzureCredential())
 
     # Select the database
     database = client.get_database_client(cosmos_database)
@@ -2766,7 +2767,7 @@ def convert_file_to_pdf(req: func.HttpRequest) -> func.HttpResponse:
     updated_filename = root_filename + '.pdf'
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extracts container
     container_client = blob_service_client.get_container_client(container=container)
@@ -2876,7 +2877,7 @@ def list_files_in_container(req: func.HttpRequest) -> func.HttpResponse:
     container = data.get("container")
 
     # Create a BlobServiceClient object which will be used to create a container client
-    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+    blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
 
     # Get a ContainerClient object for the extracts container
     container_client = blob_service_client.get_container_client(container=container)
@@ -2955,7 +2956,7 @@ def create_update_cosmos_profile(req: func.HttpRequest) -> func.HttpResponse:
     # Create containers
     if not storage_created:
         try:
-            blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'])
+            blob_service_client = BlobServiceClient.from_connection_string(os.environ['STORAGE_CONN_STR'], credential=DefaultAzureCredential())
             blob_service_client.create_container(source_container)
             blob_service_client.create_container(extract_container)
         except Exception as e:
