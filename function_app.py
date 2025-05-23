@@ -2814,14 +2814,14 @@ def convert_to_pdf_helper(input_bytes, input_extension='.docx', timeout=10):
         logging.info(f"Wrote input file: {input_path}")
 
         # Build the conversion command
-        # command = [
-        #     'libreoffice', '--headless', '--convert-to', 'pdf',
-        #     '--outdir', tmpdirname, input_path
-        # ]
         command = [
-             r"C:\Program Files\LibreOffice\program\soffice.exe", '--headless', '--convert-to', 'pdf',
+            'libreoffice', '--headless', '--convert-to', 'pdf',
             '--outdir', tmpdirname, input_path
         ]
+        # command = [
+        #      r"C:\Program Files\LibreOffice\program\soffice.exe", '--headless', '--convert-to', 'pdf',
+        #     '--outdir', tmpdirname, input_path
+        # ]
         logging.info(f"Running command: {' '.join(command)}")
 
         try:
